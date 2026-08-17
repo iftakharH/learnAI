@@ -37,8 +37,10 @@ const upload = multer({
   }
 });
 
+router.route('/upload')
+  .post(protect, upload.single('document'), uploadDocument);
+
 router.route('/')
-  .post(protect, upload.single('document'), uploadDocument)
   .get(protect, getDocuments);
 
 router.route('/:id')
