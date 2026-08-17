@@ -99,7 +99,7 @@ const Register = () => {
                   type="password"
                   required
                   className="focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 sm:text-sm border-slate-300 rounded-md py-2 border outline-none transition-shadow"
-                  placeholder="••••••••"
+                  placeholder="Password"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 />
@@ -116,7 +116,7 @@ const Register = () => {
                   type="password"
                   required
                   className="focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 sm:text-sm border-slate-300 rounded-md py-2 border outline-none transition-shadow"
-                  placeholder="••••••••"
+                  placeholder="Confirm password"
                   value={formData.confirmPassword}
                   onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
                 />

@@ -52,16 +52,28 @@ const Dashboard = () => {
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+
+    e.target.value = '';
+
+    if (!user?.token) {
+      logout();
+      navigate('/login');
+      alert('Please sign in again before uploading a PDF.');
+      return;
+    }
+
+    if (file.type !== 'application/pdf') {
+      alert('Upload failed: Only PDFs are allowed');
+      return;
+    }
     
     const formData = new FormData();
     formData.append('document', file);
     
     try {
       setLoading(true);
-      await api.post('/documents/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      fetchDashboardData();
+      await api.post('/documents/upload', formData);
+      await fetchDashboardData();
     } catch (err) {
       alert('Upload failed: ' + (err.response?.data?.message || err.message));
     } finally {

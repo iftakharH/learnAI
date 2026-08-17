@@ -27,6 +27,9 @@ const uploadDocument = async (req, res, next) => {
 
     res.status(201).json(newDocument);
   } catch (error) {
+    if (req.file?.path && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
     next(error);
   }
 };

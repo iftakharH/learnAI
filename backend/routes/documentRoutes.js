@@ -22,12 +22,16 @@ const storage = multer.diskStorage({
     cb(null, uploadDir);
   },
   filename(req, file, cb) {
-    cb(null, `${Date.now()}-${file.originalname}`);
+    const safeName = path.basename(file.originalname).replace(/[^a-zA-Z0-9._-]/g, '_');
+    cb(null, `${Date.now()}-${safeName}`);
   }
 });
 
 const upload = multer({
   storage,
+  limits: {
+    fileSize: 15 * 1024 * 1024,
+  },
   fileFilter: function (req, file, cb) {
     if (file.mimetype === 'application/pdf') {
       cb(null, true);
@@ -37,8 +41,24 @@ const upload = multer({
   }
 });
 
+const handleUpload = (req, res, next) => {
+  upload.single('document')(req, res, (err) => {
+    if (!err) {
+      return next();
+    }
+
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      res.status(400);
+      return next(new Error('PDF must be 15MB or smaller'));
+    }
+
+    res.status(400);
+    return next(err);
+  });
+};
+
 router.route('/upload')
-  .post(protect, upload.single('document'), uploadDocument);
+  .post(protect, handleUpload, uploadDocument);
 
 router.route('/')
   .get(protect, getDocuments);

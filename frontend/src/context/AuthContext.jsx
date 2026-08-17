@@ -1,5 +1,6 @@
 import React, { createContext, useState, useEffect } from 'react';
 import api from '../api/axios';
+import { clearStoredUser, getStoredUser, setStoredUser } from '../utils/authStorage';
 
 export const AuthContext = createContext();
 
@@ -9,27 +10,27 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     // Check if user is logged in
-    const storedUser = localStorage.getItem('user');
+    const storedUser = getStoredUser();
     if (storedUser) {
-      setUser(JSON.parse(storedUser));
+      setUser(storedUser);
     }
     setLoading(false);
   }, []);
 
   const login = async (email, password) => {
     const { data } = await api.post('/auth/login', { email, password });
-    localStorage.setItem('user', JSON.stringify(data));
+    setStoredUser(data);
     setUser(data);
   };
 
   const register = async (name, email, password) => {
     const { data } = await api.post('/auth/register', { name, email, password });
-    localStorage.setItem('user', JSON.stringify(data));
+    setStoredUser(data);
     setUser(data);
   };
 
   const logout = () => {
-    localStorage.removeItem('user');
+    clearStoredUser();
     setUser(null);
   };
 
