@@ -12,7 +12,7 @@ const FlashcardsTab = ({ documentId }) => {
 
   useEffect(() => {
     fetchFlashcards();
-  }, []);
+  }, [documentId]);
 
   const fetchFlashcards = async () => {
     try {
@@ -37,7 +37,7 @@ const FlashcardsTab = ({ documentId }) => {
         documentId, 
         flashcards: res.data.flashcards 
       });
-      fetchFlashcards();
+      await fetchFlashcards();
     } catch (err) {
       alert('Failed to generate flashcards');
     } finally {

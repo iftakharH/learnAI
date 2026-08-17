@@ -1,4 +1,5 @@
 const Flashcard = require('../models/Flashcard');
+const Document = require('../models/Document');
 
 // @desc    Get all flashcards for user (optional filter by document)
 // @route   GET /api/flashcards
@@ -25,6 +26,14 @@ const bulkSaveFlashcards = async (req, res, next) => {
     if (!flashcards || !Array.isArray(flashcards)) {
       res.status(400);
       throw new Error('Please provide an array of flashcards');
+    }
+
+    if (documentId) {
+      const document = await Document.findOne({ _id: documentId, user: req.user._id });
+      if (!document) {
+        res.status(404);
+        throw new Error('Document not found or unauthorized');
+      }
     }
 
     const flashcardsToInsert = flashcards.map(fc => ({

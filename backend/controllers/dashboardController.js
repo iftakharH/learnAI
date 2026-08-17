@@ -14,13 +14,13 @@ const getDashboardOverview = async (req, res, next) => {
       Document.countDocuments({ user: userId }),
       Flashcard.countDocuments({ user: userId }),
       Quiz.countDocuments({ user: userId, score: { $gt: 0 } }),
-      Quiz.find({ user: userId }).select('score totalQuestions')
+      Quiz.find({ user: userId, score: { $gt: 0 } }).select('score totalQuestions')
     ]);
 
     // Calculate average score
     let averageScore = 0;
     if (quizzes.length > 0) {
-      const totalScore = quizzes.reduce((acc, curr) => acc + (curr.score / curr.totalQuestions), 0);
+      const totalScore = quizzes.reduce((acc, curr) => acc + (curr.score / Math.max(curr.totalQuestions, 1)), 0);
       averageScore = Math.round((totalScore / quizzes.length) * 100);
     }
 

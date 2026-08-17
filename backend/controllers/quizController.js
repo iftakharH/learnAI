@@ -1,11 +1,15 @@
 const Quiz = require('../models/Quiz');
+const Document = require('../models/Document');
 
 // @desc    Get all quizzes for user
 // @route   GET /api/quizzes
 // @access  Private
 const getQuizzes = async (req, res, next) => {
   try {
-    const quizzes = await Quiz.find({ user: req.user._id }).sort({ createdAt: -1 });
+    const filter = { user: req.user._id };
+    if (req.query.document) filter.document = req.query.document;
+
+    const quizzes = await Quiz.find(filter).sort({ createdAt: -1 });
     res.json(quizzes);
   } catch (error) {
     next(error);
@@ -22,6 +26,14 @@ const saveQuiz = async (req, res, next) => {
     if (!questions || !Array.isArray(questions)) {
       res.status(400);
       throw new Error('Please provide an array of questions');
+    }
+
+    if (documentId) {
+      const document = await Document.findOne({ _id: documentId, user: req.user._id });
+      if (!document) {
+        res.status(404);
+        throw new Error('Document not found or unauthorized');
+      }
     }
 
     const quiz = await Quiz.create({

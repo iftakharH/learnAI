@@ -18,15 +18,13 @@ const QuizzesTab = ({ documentId }) => {
 
   useEffect(() => {
     fetchQuizzes();
-  }, []);
+  }, [documentId]);
 
   const fetchQuizzes = async () => {
     try {
       setLoading(true);
-      const res = await api.get('/quizzes');
-      // Filter quizzes for this document manually since endpoint gets all
-      const docQuizzes = res.data.filter(q => q.document === documentId);
-      setQuizzes(docQuizzes);
+      const res = await api.get(`/quizzes?document=${documentId}`);
+      setQuizzes(res.data);
     } catch (err) {
       console.error(err);
     } finally {
@@ -75,9 +73,10 @@ const QuizzesTab = ({ documentId }) => {
       setSelectedOption('');
       setIsAnswered(false);
     } else {
-      setIsFinished(true);
       // Submit score to DB
       const finalScore = score + (selectedOption === activeQuiz.questions[currentQIndex].correctAnswer ? 1 : 0);
+      setScore(finalScore);
+      setIsFinished(true);
       try {
         await api.put(`/quizzes/${activeQuiz._id}/submit`, { score: finalScore });
         fetchQuizzes(); // Refresh list to update score

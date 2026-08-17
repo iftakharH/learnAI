@@ -1,7 +1,9 @@
 const Document = require('../models/Document');
+const ChatHistory = require('../models/ChatHistory');
+const Flashcard = require('../models/Flashcard');
+const Quiz = require('../models/Quiz');
 const fs = require('fs');
-const pdfParse = require('pdf-parse');
-const path = require('path');
+const { PDFParse } = require('pdf-parse');
 
 // @desc    Upload a new document & extract text
 // @route   POST /api/documents/upload
@@ -15,7 +17,14 @@ const uploadDocument = async (req, res, next) => {
 
     const filePath = req.file.path;
     const dataBuffer = fs.readFileSync(filePath);
-    const data = await pdfParse(dataBuffer);
+    const parser = new PDFParse({ data: dataBuffer });
+    let data;
+
+    try {
+      data = await parser.getText();
+    } finally {
+      await parser.destroy();
+    }
 
     const newDocument = await Document.create({
       user: req.user._id,
@@ -80,6 +89,12 @@ const deleteDocument = async (req, res, next) => {
     if (fs.existsSync(document.storedFilepath)) {
       fs.unlinkSync(document.storedFilepath);
     }
+
+    await Promise.all([
+      ChatHistory.deleteMany({ document: document._id, user: req.user._id }),
+      Flashcard.deleteMany({ document: document._id, user: req.user._id }),
+      Quiz.deleteMany({ document: document._id, user: req.user._id }),
+    ]);
 
     await document.deleteOne();
     res.json({ message: 'Document removed' });
