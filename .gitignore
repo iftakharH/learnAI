@@ -1,0 +1,7 @@
+backend/node_modules
+frontend/node_modules
+backend/uploads
+frontend/uploads
+.env
+preparation.md
+tasks.md
