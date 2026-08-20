@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { FileText, Lightbulb, Save, AlertTriangle, X } from 'lucide-react';
 import api from '../../api/axios';
 
-const getApiErrorMessage = (err) => err?.response?.data?.message || err?.message || 'Request failed. Please try again.';
+const getApiErrorMessage = (err) => err?.response?.data?.message || err?.message || 'We could not complete this request. Please try again.';
 
 const AIActionsTab = ({ documentId }) => {
   const [summary, setSummary] = useState('');

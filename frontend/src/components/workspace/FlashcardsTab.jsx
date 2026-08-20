@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Layers, ChevronLeft, ChevronRight, Star, Plus, AlertTriangle, X } from 'lucide-react';
 import api from '../../api/axios';
 
-const getApiErrorMessage = (err) => err?.response?.data?.message || err?.message || 'Request failed. Please try again.';
+const getApiErrorMessage = (err) => err?.response?.data?.message || err?.message || 'We could not load your flashcards. Please try again.';
 
 const FlashcardsTab = ({ documentId }) => {
   const [flashcards, setFlashcards] = useState([]);

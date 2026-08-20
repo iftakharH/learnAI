@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, AlertCircle, X } from 'lucide-react';
 import api from '../../api/axios';
 
-const getApiErrorMessage = (err) => err?.response?.data?.message || err?.message || 'Failed to send message.';
+const getApiErrorMessage = (err) => err?.response?.data?.message || err?.message || 'We could not send your message. Please try again.';
 
 const AIChatTab = ({ documentId }) => {
   const [messages, setMessages] = useState([]);

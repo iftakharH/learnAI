@@ -1,14 +1,16 @@
+const NEUTRAL_AI_ERROR = 'The AI service could not complete this request right now. Please try again.';
+
 const FRIENDLY_ERRORS = [
-  { re: /api.?key|invalid.*credentials|authenticat/i, msg: 'AI service authentication failed. Please check your GEMINI_API_KEY in the server .env file.' },
-  { re: /quota|rate.?limit|429|resource.?exhausted/i, msg: 'AI service quota reached or rate limit hit. Please try again in a moment.' },
-  { re: /timeout|timed.?out|network|ECONNREFUSED|fetch.?failed/i, msg: 'AI service timed out or is temporarily unavailable. Please try again.' },
-  { re: /context.?length|token.?limit|content.?too.?long|too.?many.?tokens/i, msg: 'Document is too long to process fully; try a shorter file or split it into parts.' },
-  { re: /malformed|unparseable|json.?parse|invalid.?json|response.?schema/i, msg: 'AI returned data we could not understand. Please retry the request.' },
+  { re: /api.?key|invalid.*credentials|authenticat/i, msg: NEUTRAL_AI_ERROR },
+  { re: /quota|rate.?limit|429|resource.?exhausted/i, msg: 'The AI service is momentarily busy. Please try again in a moment.' },
+  { re: /timeout|timed.?out|network|ECONNREFUSED|fetch.?failed/i, msg: 'The AI service took too long to respond. Please try again.' },
+  { re: /context.?length|token.?limit|content.?too.?long|too.?many.?tokens/i, msg: 'The document is too long to process fully; try a shorter file or split it into parts.' },
+  { re: /malformed|unparseable|json.?parse|invalid.?json|response.?schema/i, msg: 'The AI returned data we could not understand. Please retry the request.' },
   { re: /empty.*(response|ai|data)|readable text.*available|no readable/i, msg: 'Could not process this file. It may be a scanned-image PDF or an unsupported format.' },
   { re: /scanned|image pdf|no readable text/i, msg: 'Uploaded PDF appears to be a scanned image (no selectable text). Please upload a text-based PDF.' },
-  { re: /gemini.?api.?key.*not.*config/i, msg: 'Server is missing GEMINI_API_KEY configuration. Ask your admin to configure it.' },
-  { re: /model.?not.?found|gemini-36-flash/i, msg: 'AI model unavailable. The server configuration may need updating.' },
-  { re: /permission|denied|forbidden|403/i, msg: 'Permission denied when contacting the AI service.' },
+  { re: /gemini.?api.?key.*not.*config/i, msg: NEUTRAL_AI_ERROR },
+  { re: /model.?not.?found|gemini-36-flash/i, msg: 'The AI model is temporarily unavailable. Please try again shortly.' },
+  { re: /permission|denied|forbidden|403/i, msg: 'Access to the AI service was denied. Please try again shortly.' },
 ];
 
 const makeFriendly = (message) => {

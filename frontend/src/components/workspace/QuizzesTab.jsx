@@ -3,7 +3,7 @@ import { Target, CheckCircle2, XCircle, ChevronRight, Award, AlertTriangle, X } 
 import confetti from 'canvas-confetti';
 import api from '../../api/axios';
 
-const getApiErrorMessage = (err) => err?.response?.data?.message || err?.message || 'Request failed. Please try again.';
+const getApiErrorMessage = (err) => err?.response?.data?.message || err?.message || 'We could not load your quiz. Please try again.';
 
 const QuizzesTab = ({ documentId }) => {
   const [quizzes, setQuizzes] = useState([]);
@@ -32,6 +32,7 @@ const QuizzesTab = ({ documentId }) => {
       setQuizzes(res.data);
     } catch (err) {
       console.error(err);
+      setError(getApiErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -99,6 +100,7 @@ const QuizzesTab = ({ documentId }) => {
         }
       } catch (err) {
         console.error(err);
+        setError(getApiErrorMessage(err));
       }
     }
   };
