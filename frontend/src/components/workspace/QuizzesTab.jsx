@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Target, CheckCircle2, XCircle, ChevronRight, Award } from 'lucide-react';
-import api from '../../api/axios';
+import { Target, CheckCircle2, XCircle, ChevronRight, Award, AlertTriangle, X } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import api from '../../api/axios';
+
+const getApiErrorMessage = (err) => err?.response?.data?.message || err?.message || 'Request failed. Please try again.';
 
 const QuizzesTab = ({ documentId }) => {
   const [quizzes, setQuizzes] = useState([]);
   const [activeQuiz, setActiveQuiz] = useState(null);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState('');
   
   // Quiz taking state
   const [currentQIndex, setCurrentQIndex] = useState(0);
@@ -15,6 +18,8 @@ const QuizzesTab = ({ documentId }) => {
   const [isAnswered, setIsAnswered] = useState(false);
   const [score, setScore] = useState(0);
   const [isFinished, setIsFinished] = useState(false);
+
+  const clearError = () => setError('');
 
   useEffect(() => {
     fetchQuizzes();
@@ -35,15 +40,23 @@ const QuizzesTab = ({ documentId }) => {
   const generateQuiz = async () => {
     try {
       setGenerating(true);
+      clearError();
       const res = await api.post(`/ai/${documentId}/quiz`, { numQuestions: 5 });
+      const questions = res.data && res.data.quiz;
+      if (!Array.isArray(questions) || questions.length === 0) {
+        throw new Error('No valid quiz questions were generated. Please try again with a text-based PDF.');
+      }
       const newQuiz = await api.post('/quizzes', { 
         documentId, 
         title: `Quiz ${quizzes.length + 1}`,
-        questions: res.data.quiz 
+        questions,
       });
+      if (!newQuiz || !newQuiz.data || !newQuiz.data._id) {
+        throw new Error('Generated quiz could not be saved.');
+      }
       setQuizzes([newQuiz.data, ...quizzes]);
     } catch (err) {
-      alert('Failed to generate quiz');
+      setError(getApiErrorMessage(err));
     } finally {
       setGenerating(false);
     }
@@ -74,8 +87,7 @@ const QuizzesTab = ({ documentId }) => {
       setIsAnswered(false);
     } else {
       // Submit score to DB
-      const finalScore = score + (selectedOption === activeQuiz.questions[currentQIndex].correctAnswer ? 1 : 0);
-      setScore(finalScore);
+      const finalScore = score;
       setIsFinished(true);
       try {
         await api.put(`/quizzes/${activeQuiz._id}/submit`, { score: finalScore });

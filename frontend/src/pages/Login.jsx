@@ -2,6 +2,7 @@ import React, { useState, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
 import { Mail, Lock, LogIn, ArrowRight } from 'lucide-react';
+import { getAuthErrorMessage } from '../utils/authErrors';
 
 const Login = () => {
   const { login } = useContext(AuthContext);
@@ -18,7 +19,7 @@ const Login = () => {
       await login(formData.email, formData.password);
       navigate('/dashboard');
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to login. Check credentials.');
+      setError(getAuthErrorMessage(err, 'Failed to login. Check credentials.'));
     } finally {
       setIsLoading(false);
     }

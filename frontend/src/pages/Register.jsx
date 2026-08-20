@@ -2,6 +2,7 @@ import React, { useState, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { Link, useNavigate } from 'react-router-dom';
 import { UserPlus, Mail, Lock, User, ArrowRight } from 'lucide-react';
+import { getAuthErrorMessage } from '../utils/authErrors';
 
 const Register = () => {
   const { register } = useContext(AuthContext);
@@ -17,13 +18,17 @@ const Register = () => {
     if (formData.password !== formData.confirmPassword) {
       return setError('Passwords do not match');
     }
+
+    if (formData.password.length < 6) {
+      return setError('Password must be at least 6 characters');
+    }
     
     setIsLoading(true);
     try {
       await register(formData.name, formData.email, formData.password);
       navigate('/dashboard');
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to register. Please try again.');
+      setError(getAuthErrorMessage(err, 'Failed to register. Please try again.'));
     } finally {
       setIsLoading(false);
     }

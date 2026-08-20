@@ -1,14 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { Layers, ChevronLeft, ChevronRight, Star, Plus } from 'lucide-react';
+import { Layers, ChevronLeft, ChevronRight, Star, Plus, AlertTriangle, X } from 'lucide-react';
 import api from '../../api/axios';
+
+const getApiErrorMessage = (err) => err?.response?.data?.message || err?.message || 'Request failed. Please try again.';
 
 const FlashcardsTab = ({ documentId }) => {
   const [flashcards, setFlashcards] = useState([]);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState('');
   
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
+
+  const clearError = () => setError('');
 
   useEffect(() => {
     fetchFlashcards();
@@ -31,15 +36,23 @@ const FlashcardsTab = ({ documentId }) => {
   const generateFlashcards = async () => {
     try {
       setGenerating(true);
+      clearError();
       const res = await api.post(`/ai/${documentId}/flashcards`, { count: 10 });
+      const generated = res.data && res.data.flashcards;
+      if (!Array.isArray(generated) || generated.length === 0) {
+        throw new Error('No valid flashcards were generated. Please try again with a text-based PDF.');
+      }
       // Bulk save generated flashcards
-      await api.post('/flashcards/bulk', { 
+      const saveRes = await api.post('/flashcards/bulk', { 
         documentId, 
-        flashcards: res.data.flashcards 
+        flashcards: generated,
       });
+      if (!saveRes || !saveRes.data || (Array.isArray(saveRes.data) && saveRes.data.length === 0)) {
+        throw new Error('Generated flashcards could not be saved.');
+      }
       await fetchFlashcards();
     } catch (err) {
-      alert('Failed to generate flashcards');
+      setError(getApiErrorMessage(err));
     } finally {
       setGenerating(false);
     }

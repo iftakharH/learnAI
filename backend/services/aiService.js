@@ -1,79 +1,213 @@
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-// Initialize Gemini API
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+// --- Helpers ----------------------------------------------------------------
 
-const getModel = () => {
-  return genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+// Conservative char limit for context window (~120k tokens for Gemini Flash)
+const MAX_TEXT_LENGTH = 500000;
+const truncateText = (text, tag) => {
+  if (!text || typeof text !== 'string') return '';
+  if (text.length <= MAX_TEXT_LENGTH) return text;
+  console.warn(`[aiSvc] ${tag}: text truncated ${text.length} -> ${MAX_TEXT_LENGTH} chars`);
+  return text.slice(0, MAX_TEXT_LENGTH);
+};
+
+// Robustly parse JSON from LLM output (handles fences, surrounding prose)
+const safeParseJSON = (raw, fallbackErrMsg) => {
+  if (!raw || !String(raw).trim()) throw new Error(fallbackErrMsg || 'Empty AI response');
+  let s = String(raw).trim();
+  if (s.startsWith('```')) s = s.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  const arr = s.match(/\[[\s\S]*\]/);
+  const obj = s.match(/\{[\s\S]*\}/);
+  if (arr) s = arr[0]; else if (obj) s = obj[0];
+  try { return JSON.parse(s); } catch (e) {
+    console.error('[aiSvc] JSON parse FAILED snippet:', s.slice(0, 300));
+    throw new Error(`AI returned unparseable data: ${e.message}`);
+  }
+};
+
+const getModel = (systemInstruction) => {
+  if (!process.env.GEMINI_API_KEY) {
+    throw new Error('GEMINI_API_KEY is not configured in environment variables.');
+  }
+  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+  const config = { model: "gemini-3.6-flash" };
+  if (systemInstruction) config.systemInstruction = systemInstruction;
+  return genAI.getGenerativeModel(config);
 };
 
 const generateDocumentSummary = async (text) => {
-  const model = getModel();
-  const prompt = `Please provide a concise, structural summary of the following document text. Focus on the main ideas, key arguments, and essential takeaways.\n\nText:\n${text}`;
-  
-  const result = await model.generateContent(prompt);
-  return result.response.text();
+  try {
+    const t = truncateText(text, 'Summary');
+    if (!t) throw new Error('No readable text available to summarize.');
+    const model = getModel();
+    const prompt = `Please provide a concise, structural summary of the following document text. Focus on the main ideas, key arguments, and essential takeaways.\n\nText:\n${t}`;
+    console.log('[aiSvc] Generating summary...');
+    const result = await model.generateContent(prompt);
+    const out = result.response.text();
+    console.log('[aiSvc] Summary OK (' + out.length + ' chars)');
+    return out;
+  } catch (e) {
+    console.error('[aiSvc] Summary FAILED:', e.message);
+    throw new Error(`Summary generation failed: ${e.message}`);
+  }
 };
 
 const explainConcept = async (concept, text) => {
-  const model = getModel();
-  const prompt = `Explain the concept of "${concept}" in-depth, specifically using the context provided by the following text. If the text does not contain enough context, explain it generally but note the lack of context.\n\nContext:\n${text}`;
-  
-  const result = await model.generateContent(prompt);
-  return result.response.text();
+  try {
+    const t = truncateText(text, `Explain:${concept}`);
+    const model = getModel();
+    const prompt = `Explain the concept of "${concept}" in-depth, specifically using the context provided by the following text. If the text does not contain enough context, explain it generally but note the lack of context.\n\nContext:\n${t}`;
+    console.log(`[aiSvc] Explaining concept "${concept}"...`);
+    const result = await model.generateContent(prompt);
+    return result.response.text();
+  } catch (e) {
+    console.error('[aiSvc] Explain FAILED:', e.message);
+    throw new Error(`Explanation failed: ${e.message}`);
+  }
 };
 
 const generateFlashcards = async (text, count = 10) => {
-  const model = getModel();
-  const prompt = `You are a learning assistant. Generate exactly ${count} flashcards based on the provided text. Return the result strictly as a JSON array of objects, where each object has a "front" (the question or term) and a "back" (the answer or definition). Do not include markdown formatting like \`\`\`json.\n\nText:\n${text}`;
-  
-  const result = await model.generateContent(prompt);
-  let responseText = result.response.text().trim();
-  
-  // Clean up potential markdown formatting
-  if (responseText.startsWith('\`\`\`json')) {
-    responseText = responseText.replace(/^\`\`\`json/m, '').replace(/\`\`\`$/m, '').trim();
-  } else if (responseText.startsWith('\`\`\`')) {
-    responseText = responseText.replace(/^\`\`\`/m, '').replace(/\`\`\`$/m, '').trim();
+  try {
+    const t = truncateText(text, `Flashcards(${count})`);
+    if (!t) throw new Error('No readable text available for flashcard generation.');
+    const n = Math.min(Math.max(parseInt(count, 10) || 10, 1), 50);
+    const model = getModel();
+    const userPrompt =
+      `Generate exactly ${n} high-quality flashcards from the document text below.\n` +
+      `Return ONLY a valid JSON array with NO markdown, NO prose, NO code fences.\n` +
+      `Each object must have only two string keys: "front" (question/term) and "back" (answer/definition).\n` +
+      `Example: [{"front":"What is X?","back":"X is Y."}]\n\n` +
+      `DOCUMENT TEXT:\n${t}`;
+
+    console.log(`[aiSvc] Generating ${n} flashcards...`);
+
+    // Strategy A: try mimeType JSON (works in SDK 0.24; no Type enum which is the bug source)
+    let raw;
+    try {
+      const r = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+        generationConfig: { responseMimeType: "application/json" },
+      });
+      raw = r.response.text();
+    } catch (mimeTypeErr) {
+      console.warn('[aiSvc] JSON mimeType failed, falling back to raw prompt...', mimeTypeErr.message);
+      const r2 = await model.generateContent(userPrompt);
+      raw = r2.response.text();
+    }
+
+    const cards = safeParseJSON(raw, 'Flashcards: empty response');
+    if (!Array.isArray(cards)) throw new Error('Flashcards: AI did not return an array.');
+
+    const clean = cards
+      .filter(c => c && typeof c.front === 'string' && typeof c.back === 'string')
+      .map(c => ({ front: c.front.trim(), back: c.back.trim() }))
+      .filter(c => c.front.length && c.back.length);
+
+    console.log(`[aiSvc] Flashcards OK: ${clean.length}/${cards.length} valid`);
+    if (clean.length === 0) throw new Error('Flashcards: AI response had 0 valid cards.');
+    return clean;
+  } catch (e) {
+    console.error('[aiSvc] Flashcards FAILED:', e.message);
+    throw new Error(`Flashcard generation failed: ${e.message}`);
   }
-  
-  return JSON.parse(responseText);
 };
 
 const generateQuiz = async (text, numQuestions = 5) => {
-  const model = getModel();
-  const prompt = `You are a learning assistant. Generate a multiple-choice quiz with exactly ${numQuestions} questions based on the provided text. Return strictly as a JSON array of objects. Each object must have: "question" (string), "options" (array of 4 strings), "correctAnswer" (string, must exactly match one of the options), and "explanation" (string).\n\nText:\n${text}`;
-  
-  const result = await model.generateContent(prompt);
-  let responseText = result.response.text().trim();
-  
-  // Clean up potential markdown formatting
-  if (responseText.startsWith('\`\`\`json')) {
-    responseText = responseText.replace(/^\`\`\`json/m, '').replace(/\`\`\`$/m, '').trim();
-  } else if (responseText.startsWith('\`\`\`')) {
-    responseText = responseText.replace(/^\`\`\`/m, '').replace(/\`\`\`$/m, '').trim();
+  try {
+    const t = truncateText(text, `Quiz(${numQuestions}q)`);
+    if (!t) throw new Error('No readable text available for quiz generation.');
+    const n = Math.min(Math.max(parseInt(numQuestions, 10) || 5, 1), 20);
+    const model = getModel();
+    const userPrompt =
+      `Generate a multiple-choice quiz with exactly ${n} questions from the document text below.\n` +
+      `Return ONLY a valid JSON array with NO markdown, NO prose, NO code fences.\n` +
+      `Each object must have:\n` +
+      `  "question" (string),\n` +
+      `  "options" (array of exactly 4 strings),\n` +
+      `  "correctAnswer" (string - must EXACTLY match one option string),\n` +
+      `  "explanation" (string - short explanation why the answer is correct).\n\n` +
+      `DOCUMENT TEXT:\n${t}`;
+
+    console.log(`[aiSvc] Generating quiz (${n}q)...`);
+
+    let raw;
+    try {
+      const r = await model.generateContent({
+        contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+        generationConfig: { responseMimeType: "application/json" },
+      });
+      raw = r.response.text();
+    } catch (mimeTypeErr) {
+      console.warn('[aiSvc] JSON mimeType failed for quiz, falling back...', mimeTypeErr.message);
+      const r2 = await model.generateContent(userPrompt);
+      raw = r2.response.text();
+    }
+
+    const qs = safeParseJSON(raw, 'Quiz: empty response');
+    if (!Array.isArray(qs)) throw new Error('Quiz: AI did not return an array.');
+
+    const clean = qs
+      .map(q => {
+        if (!q || typeof q.question !== 'string') return null;
+        if (!Array.isArray(q.options) || q.options.length < 2) return null;
+        if (typeof q.correctAnswer !== 'string') return null;
+        const opts = q.options.filter(o => typeof o === 'string').map(o => o.trim()).slice(0, 4);
+        let ans = q.correctAnswer.trim();
+        if (!opts.includes(ans)) {
+          const loose = opts.find(o => o.toLowerCase() === ans.toLowerCase());
+          if (loose) ans = loose; else return null;
+        }
+        return {
+          question: q.question.trim(),
+          options: opts,
+          correctAnswer: ans,
+          explanation: (q.explanation || '').trim(),
+        };
+      })
+      .filter(q => q && q.options.length >= 2 && q.question.length > 0);
+
+    console.log(`[aiSvc] Quiz OK: ${clean.length}/${qs.length} valid questions`);
+    if (clean.length === 0) throw new Error('Quiz: AI response had 0 valid questions.');
+    return clean;
+  } catch (e) {
+    console.error('[aiSvc] Quiz FAILED:', e.message);
+    throw new Error(`Quiz generation failed: ${e.message}`);
   }
-  
-  return JSON.parse(responseText);
 };
 
 const processDocumentChat = async (chatHistory, userQuery, documentContext) => {
-  const model = getModel();
-  
-  // Format the history for the Gemini model (requires role 'user' or 'model' and parts array)
-  const formattedHistory = chatHistory.map(msg => ({
-    role: msg.role,
-    parts: [{ text: msg.text }]
-  }));
+  try {
+    const ctx = truncateText(documentContext, 'ChatContext');
 
-  const chat = model.startChat({
-    history: formattedHistory,
-  });
+    // Build model WITHIN the model, NOT startChat() — this is the bug: startChat() options
+    // in SDK 0.24 does not reliably accept systemInstruction. We also ensure
+    // the model constructor does (and it's the canonical place for it anyway).
+    const systemInstruction =
+      `You are an accurate, helpful learning assistant. Answer the user's questions using ONLY using the DOCUMENT CONTEXT below. ` +
+      `If the context clearly and honestly say so, and answer with the full answer is not in the context, say so honestly, then ` +
+      `but still help if you can provide useful.\n\nDOCUMENT CONTEXT:\n${ctx}`;
+    const model = getModel(systemInstruction);
 
-  const prompt = `Context from document:\n${documentContext}\n\nUser Question:\n${userQuery}\n\nPlease answer the user's question accurately using the document context provided above.`;
-  
-  const result = await chat.sendMessage(prompt);
-  return result.response.text();
+    // Sanitize history (map roles, filter junk, limit depth)
+    const formattedHistory = (chatHistory || [])
+      .filter(m => m && typeof m.text === 'string' && m.text.trim())
+      .map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.text }] }))
+      .filter(m => m.role === 'user' || m.role === 'model');
+    if (formattedHistory.length > 40) {
+      console.warn(`[aiSvc] Chat history trimmed ${formattedHistory.length} -> 40 messages`);
+      formattedHistory.splice(0, formattedHistory.length - 40);
+    }
+
+    console.log('[aiSvc] Chat query:', String(userQuery || '').slice(0, 80));
+    const chat = model.startChat({ history: formattedHistory });
+    const result = await chat.sendMessage(userQuery);
+    const out = result.response.text();
+    console.log('[aiSvc] Chat reply OK (' + out.length + ' chars)');
+    return out;
+  } catch (e) {
+    console.error('[aiSvc] Chat FAILED:', e.message);
+    throw new Error(`Chat request failed: ${e.message}`);
+  }
 };
 
 module.exports = {

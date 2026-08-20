@@ -3,7 +3,7 @@ const ChatHistory = require('../models/ChatHistory');
 const Flashcard = require('../models/Flashcard');
 const Quiz = require('../models/Quiz');
 const fs = require('fs');
-const { PDFParse } = require('pdf-parse');
+const pdfParse = require('pdf-parse');
 
 // @desc    Upload a new document & extract text
 // @route   POST /api/documents/upload
@@ -17,13 +17,27 @@ const uploadDocument = async (req, res, next) => {
 
     const filePath = req.file.path;
     const dataBuffer = fs.readFileSync(filePath);
-    const parser = new PDFParse({ data: dataBuffer });
-    let data;
 
+    // pdf-parse v2.x: default export is a function returning { text }
+    let extractedText = '';
     try {
-      data = await parser.getText();
-    } finally {
-      await parser.destroy();
+      const parsed = await pdfParse(dataBuffer);
+      extractedText = (parsed && parsed.text) || '';
+    } catch (parseErr) {
+      console.error('[PDF Parse] parse error:', parseErr.message);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+      return res.status(400).json({ message: 'Failed to parse PDF. Ensure the file is a valid, non-corrupted PDF.' });
+    }
+
+    console.log(`[PDF Parse] Extracted ${extractedText.length} characters from: ${req.file.originalname}`);
+
+    if (!extractedText || extractedText.trim().length < 10) {
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+      return res.status(400).json({ message: 'No readable text found in the PDF. This usually means the file is a scanned image rather than a text-based PDF.' });
     }
 
     const newDocument = await Document.create({
@@ -31,7 +45,7 @@ const uploadDocument = async (req, res, next) => {
       originalFilename: req.file.originalname,
       storedFilepath: filePath,
       fileSize: req.file.size,
-      extractedText: data.text,
+      extractedText: extractedText,
     });
 
     res.status(201).json(newDocument);

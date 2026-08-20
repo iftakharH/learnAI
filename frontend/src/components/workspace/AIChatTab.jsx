@@ -1,12 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, User } from 'lucide-react';
+import { Send, Bot, User, AlertCircle, X } from 'lucide-react';
 import api from '../../api/axios';
+
+const getApiErrorMessage = (err) => err?.response?.data?.message || err?.message || 'Failed to send message.';
 
 const AIChatTab = ({ documentId }) => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const messagesEndRef = useRef(null);
+
+  const clearError = () => setError('');
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -19,17 +24,23 @@ const AIChatTab = ({ documentId }) => {
   const handleSend = async (e) => {
     e.preventDefault();
     if (!input.trim()) return;
+    clearError();
 
-    const userMessage = { role: 'user', text: input };
+    const userMessage = { role: 'user', text: input.trim() };
     setMessages(prev => [...prev, userMessage]);
     setInput('');
     setLoading(true);
 
     try {
       const res = await api.post(`/ai/${documentId}/chat`, { query: userMessage.text });
-      setMessages(res.data.messages);
+      // Backend returns { messages: full history } — prefer that to stay in sync with DB
+      if (res.data && Array.isArray(res.data.messages)) {
+        setMessages(res.data.messages);
+      } else if (res.data && res.data.response) {
+        setMessages(prev => [...prev, { role: 'model', text: res.data.response }]);
+      }
     } catch (err) {
-      setMessages(prev => [...prev, { role: 'model', text: 'Error: Failed to connect to AI.' }]);
+      setError(getApiErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -37,14 +48,23 @@ const AIChatTab = ({ documentId }) => {
 
   return (
     <div className="flex flex-col h-[calc(100vh-160px)] bg-slate-50 rounded-xl border border-slate-200 overflow-hidden">
+      {error && (
+        <div className="mx-4 mt-4 p-3 border border-red-200 bg-red-50 rounded-lg flex items-start gap-2 text-sm">
+          <AlertCircle className="h-4 w-4 text-red-600 mt-0.5 shrink-0" />
+          <div className="flex-1 text-red-800">{error}</div>
+          <button onClick={clearError} className="text-red-500 hover:text-red-700 shrink-0" aria-label="Dismiss">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.length === 0 && (
+        {messages.length === 0 && !error && (
           <div className="h-full flex flex-col items-center justify-center text-slate-400">
             <Bot size={48} className="mb-4 opacity-50" />
             <p>Ask anything about this document!</p>
           </div>
         )}
-        {messages.map((msg, i) => (
+        {messages?.map((msg, i) => (
           <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`max-w-[80%] rounded-2xl p-4 flex gap-3 ${msg.role === 'user' ? 'bg-blue-600 text-white rounded-tr-sm' : 'bg-white border border-slate-200 text-slate-800 rounded-tl-sm shadow-sm'}`}>
               <div className="mt-0.5 opacity-80">
