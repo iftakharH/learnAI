@@ -1,8 +1,9 @@
 import axios from 'axios';
 import { clearStoredUser, getStoredUser } from '../utils/authStorage';
 
-const apiBaseURL = import.meta.env.VITE_API_URL
-  || (import.meta.env.DEV ? '/api' : 'https://learnai-backend-4ec4.onrender.com/api');
+// Normalize URL to always guarantee an '/api' suffix
+const envUrl = import.meta.env.VITE_API_URL || 'https://learnai-backend-4ec4.onrender.com/api';
+const apiBaseURL = envUrl.endsWith('/api') ? envUrl : `${envUrl.replace(/\/$/, '')}/api`;
 
 const api = axios.create({
   baseURL: apiBaseURL,

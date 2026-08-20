@@ -83,6 +83,14 @@ app.use('/api/flashcards', flashcardRoutes);
 app.use('/api/quizzes', quizRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 
+// Fallback Route Aliases (Fixes missing /api prefix from frontend requests)
+app.use('/auth', authRoutes);
+app.use('/documents', documentRoutes);
+app.use('/ai', aiRoutes);
+app.use('/flashcards', flashcardRoutes);
+app.use('/quizzes', quizRoutes);
+app.use('/dashboard', dashboardRoutes);
+
 // Error Handling Middleware
 app.use((req, res, next) => {
   res.status(404).json({ message: `Not Found - ${req.originalUrl}` });
