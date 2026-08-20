@@ -6,7 +6,7 @@ const path = require('path');
 
 // Database & Middleware
 const connectDB = require('./config/db');
-const { notFound, errorHandler } = require('./middleware/errorMiddleware');
+const { errorHandler } = require('./middleware/errorMiddleware');
 
 // Route Imports
 const authRoutes = require('./routes/authRoutes');
@@ -23,10 +23,6 @@ requiredEnvVars.forEach((envVar) => {
     console.warn(`[WARNING] Missing environment variable: ${envVar}`);
   }
 });
-
-if (process.env.GEMINI_API_KEY && !process.env.GEMINI_API_KEY.startsWith('AIza')) {
-  console.warn('[server] ⚠ GEMINI_API_KEY may be malformed (expected format starts with "AIza").');
-}
 
 // Connect to Database
 connectDB();
@@ -83,7 +79,11 @@ app.use('/api/quizzes', quizRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 
 // Error Handling Middleware
-app.use(notFound);
+app.use((req, res, next) => {
+  res.status(404).json({ message: `Not Found - ${req.originalUrl}` });
+});
+
+// Main Error Handler
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
