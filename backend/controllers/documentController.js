@@ -15,35 +15,47 @@ const uploadDocument = async (req, res, next) => {
       throw new Error('Please upload a file');
     }
 
-    const filePath = req.file.path;
-    const dataBuffer = fs.readFileSync(filePath);
+    // 1. Resolve buffer safely from memory storage or disk path
+    let dataBuffer;
+    if (req.file.buffer) {
+      dataBuffer = req.file.buffer;
+    } else if (req.file.path && fs.existsSync(req.file.path)) {
+      dataBuffer = fs.readFileSync(req.file.path);
+    } else {
+      res.status(400);
+      throw new Error('Could not read uploaded file buffer');
+    }
 
-    // pdf-parse v2.x: default export is a function returning { text }
+    // 2. Parse PDF buffer
     let extractedText = '';
     try {
       const parsed = await pdfParse(dataBuffer);
-      extractedText = (parsed && parsed.text) || '';
+      extractedText = parsed && parsed.text ? parsed.text.trim() : '';
     } catch (parseErr) {
-      console.error('[PDF Parse] parse error:', parseErr.message);
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
+      console.error('[PDF Parse Error]:', parseErr.message);
+      if (req.file.path && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
       }
-      return res.status(400).json({ message: 'Failed to parse PDF. Ensure the file is a valid, non-corrupted PDF.' });
+      return res.status(400).json({
+        message: 'Failed to parse PDF. Ensure the file is a valid, non-corrupted PDF.',
+      });
     }
 
-    console.log(`[PDF Parse] Extracted ${extractedText.length} characters from: ${req.file.originalname}`);
-
-    if (!extractedText || extractedText.trim().length < 10) {
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
+    // 3. Check for readable text
+    if (!extractedText || extractedText.length < 10) {
+      if (req.file.path && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
       }
-      return res.status(400).json({ message: 'No readable text found in the PDF. This usually means the file is a scanned image rather than a text-based PDF.' });
+      return res.status(400).json({
+        message: 'No readable text found in PDF. Scanned or image-only PDFs are not supported.',
+      });
     }
 
+    // 4. Save record
     const newDocument = await Document.create({
       user: req.user._id,
       originalFilename: req.file.originalname,
-      storedFilepath: filePath,
+      storedFilepath: req.file.path || '',
       fileSize: req.file.size,
       extractedText: extractedText,
     });
@@ -62,7 +74,9 @@ const uploadDocument = async (req, res, next) => {
 // @access  Private
 const getDocuments = async (req, res, next) => {
   try {
-    const documents = await Document.find({ user: req.user._id }).sort({ createdAt: -1 }).select('-extractedText');
+    const documents = await Document.find({ user: req.user._id })
+      .sort({ createdAt: -1 })
+      .select('-extractedText');
     res.json(documents);
   } catch (error) {
     next(error);
@@ -99,8 +113,7 @@ const deleteDocument = async (req, res, next) => {
       throw new Error('Document not found or unauthorized');
     }
 
-    // Delete file from filesystem
-    if (fs.existsSync(document.storedFilepath)) {
+    if (document.storedFilepath && fs.existsSync(document.storedFilepath)) {
       fs.unlinkSync(document.storedFilepath);
     }
 
