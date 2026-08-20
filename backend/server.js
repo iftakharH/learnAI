@@ -65,6 +65,11 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Static File Storage
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// Root Endpoint
+app.get('/', (req, res) => {
+  res.status(200).json({ status: 'OK', message: 'Welcome to learnAI API' });
+});
+
 // Health Check Endpoint
 app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'OK', message: 'learnAI API Running' });
