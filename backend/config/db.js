@@ -6,14 +6,16 @@ const connectDB = async () => {
       throw new Error('MONGODB_URI is not configured');
     }
 
+    // Force database name to lowercase to avoid casing conflicts
+    const dbName = (process.env.MONGODB_DB_NAME || 'learnai').toLowerCase();
+
     const conn = await mongoose.connect(process.env.MONGODB_URI, {
-      dbName: process.env.MONGODB_DB_NAME || 'learnai',
+      dbName: dbName,
       serverSelectionTimeoutMS: 10000,
     });
-    console.log(`MongoDB Connected: ${conn.connection.host}`);
+    console.log(`MongoDB Connected: ${conn.connection.host} / ${conn.connection.name}`);
   } catch (error) {
     console.error(`MongoDB Connection Error: ${error.message}`);
-    console.error('NOTE: Please ensure your local MongoDB service is running, or update MONGODB_URI in .env with an Atlas URL.');
     process.exit(1);
   }
 };
