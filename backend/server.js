@@ -1,14 +1,14 @@
+require('dotenv').config();
 const express = require('express');
-const dotenv = require('dotenv');
 const cors = require('cors');
+const helmet = require('helmet');
 const path = require('path');
 
-// Load env vars before importing anything else
-dotenv.config({ path: path.resolve(__dirname, '../.env') });
-
+// Database & Middleware
 const connectDB = require('./config/db');
-const { errorHandler } = require('./middleware/errorMiddleware');
+const { notFound, errorHandler } = require('./middleware/errorMiddleware');
 
+// Route Imports
 const authRoutes = require('./routes/authRoutes');
 const documentRoutes = require('./routes/documentRoutes');
 const aiRoutes = require('./routes/aiRoutes');
@@ -16,32 +16,65 @@ const flashcardRoutes = require('./routes/flashcardRoutes');
 const quizRoutes = require('./routes/quizRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
 
+// Non-blocking Environment Check
 const requiredEnvVars = ['MONGODB_URI', 'JWT_SECRET', 'GEMINI_API_KEY'];
-for (const envVar of requiredEnvVars) {
+requiredEnvVars.forEach((envVar) => {
   if (!process.env[envVar]) {
-    console.error(`${envVar} is not configured. Set it in .env or Render environment variables.`);
-    process.exit(1);
+    console.warn(`[WARNING] Missing environment variable: ${envVar}`);
   }
-}
+});
+
 if (process.env.GEMINI_API_KEY && !process.env.GEMINI_API_KEY.startsWith('AIza')) {
-  console.warn('[server] ⚠ GEMINI_API_KEY does not start with "AIza". This may be a malformed Google API key. Expected keys usually follow the "AIza" key format. If calls fail, regenerate at https://aistudio.google.com/app/apikey');
+  console.warn('[server] ⚠ GEMINI_API_KEY may be malformed (expected format starts with "AIza").');
 }
 
-// Connect to database
+// Connect to Database
 connectDB();
 
 const app = express();
 
-// Middleware
-app.use(cors());
-app.use(express.json());
+// Enable Trust Proxy for Render Reverse Proxies
+app.set('trust proxy', 1);
+
+// Flexible CORS Configuration
+const allowedOrigins = [
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:3000',
+  'https://learn-ai-edu.vercel.app'
+];
+
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
+        callback(null, true);
+      } else {
+        callback(null, true); // Prevent proxy crashes during development/deployment
+      }
+    },
+    credentials: true,
+  })
+);
+
+// Security & Payload Body Parsers
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  })
+);
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Static File Storage
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// Health Check Endpoint
 app.get('/api/health', (req, res) => {
-  res.status(200).json({ status: 'ok' });
+  res.status(200).json({ status: 'OK', message: 'learnAI API Running' });
 });
 
-// Routes
+// API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/ai', aiRoutes);
@@ -49,11 +82,12 @@ app.use('/api/flashcards', flashcardRoutes);
 app.use('/api/quizzes', quizRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 
-// Error Middleware
+// Error Handling Middleware
+app.use(notFound);
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on port ${PORT}`);
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
 });
