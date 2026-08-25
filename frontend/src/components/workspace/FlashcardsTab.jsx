@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Layers, ChevronLeft, ChevronRight, Star, Plus, AlertTriangle, X } from 'lucide-react';
+import { Layers, ChevronLeft, ChevronRight, Star, Plus, AlertTriangle, X, Sparkles } from 'lucide-react';
 import api from '../../api/axios';
 
 const getApiErrorMessage = (err) => err?.response?.data?.message || err?.message || 'We could not load your flashcards. Please try again.';
@@ -73,28 +73,54 @@ const FlashcardsTab = ({ documentId }) => {
 
   const nextCard = () => {
     setIsFlipped(false);
-    setCurrentIndex((prev) => Math.min(prev + 1, flashcards.length - 1));
+    setTimeout(() => setCurrentIndex((prev) => Math.min(prev + 1, flashcards.length - 1)), 50);
   };
 
   const prevCard = () => {
     setIsFlipped(false);
-    setCurrentIndex((prev) => Math.max(prev - 1, 0));
+    setTimeout(() => setCurrentIndex((prev) => Math.max(prev - 1, 0)), 50);
   };
 
-  if (loading) return <div className="text-center py-10 text-slate-500">Loading flashcards...</div>;
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-48 gap-3">
+        <div className="w-10 h-10 border-2 border-violet-200 border-t-violet-500 rounded-full animate-spin" />
+        <p className="text-sm text-slate-400 font-medium">Loading flashcards…</p>
+      </div>
+    );
+  }
 
   if (flashcards.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-64 text-center">
-        <Layers size={48} className="text-slate-300 mb-4" />
-        <h3 className="text-lg font-semibold text-slate-800 mb-2">No Flashcards Yet</h3>
-        <p className="text-sm text-slate-500 mb-6">Let AI generate a study deck from this document.</p>
-        <button 
+      <div className="flex flex-col items-center justify-center h-full text-center px-4 py-12">
+        {error && (
+          <div className="w-full mb-5 p-3 border border-red-200 bg-red-50 rounded-xl flex items-start gap-2 text-sm">
+            <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+            <div className="flex-1 text-red-700 font-medium">{error}</div>
+            <button onClick={clearError}><X className="h-4 w-4 text-red-400 hover:text-red-600" /></button>
+          </div>
+        )}
+        <div className="w-20 h-20 bg-gradient-to-br from-violet-100 to-purple-100 rounded-3xl flex items-center justify-center mx-auto mb-5">
+          <Layers size={36} className="text-violet-400" />
+        </div>
+        <h3 className="text-lg font-extrabold text-slate-800 mb-2">No Flashcards Yet</h3>
+        <p className="text-sm text-slate-400 mb-6 max-w-xs">Let AI generate a smart study deck from this document in seconds.</p>
+        <button
           onClick={generateFlashcards}
           disabled={generating}
-          className="bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg font-medium shadow-sm flex items-center gap-2 transition-colors"
+          className="inline-flex items-center gap-2 bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 disabled:opacity-50 text-white px-6 py-3 rounded-2xl font-bold shadow-lg hover:shadow-xl transition-all"
         >
-          {generating ? 'Generating (takes a minute)...' : <><Plus size={18} /> Generate Deck</>}
+          {generating ? (
+            <>
+              <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+              Generating deck…
+            </>
+          ) : (
+            <>
+              <Sparkles size={16} />
+              Generate Deck
+            </>
+          )}
         </button>
       </div>
     );
@@ -103,73 +129,96 @@ const FlashcardsTab = ({ documentId }) => {
   const card = flashcards[currentIndex];
 
   return (
-    <div className="flex flex-col h-[calc(100vh-160px)]">
-      <div className="flex justify-between items-center mb-6">
-        <div className="text-sm font-medium text-slate-500">
-          Card {currentIndex + 1} of {flashcards.length}
+    <div className="flex flex-col h-full">
+      {/* Header */}
+      <div className="flex justify-between items-center mb-5 flex-shrink-0">
+        <div>
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Card</span>
+          <span className="ml-2 text-lg font-extrabold text-slate-900">{currentIndex + 1}</span>
+          <span className="text-slate-300 mx-1">/</span>
+          <span className="text-slate-400 font-semibold">{flashcards.length}</span>
         </div>
-        <button 
+        <button
           onClick={generateFlashcards}
           disabled={generating}
-          className="text-xs bg-purple-100 hover:bg-purple-200 text-purple-700 px-3 py-1.5 rounded-md font-semibold transition-colors disabled:opacity-50"
+          className="flex items-center gap-1.5 text-xs font-bold bg-violet-50 hover:bg-violet-100 text-violet-700 border border-violet-200 px-3 py-2 rounded-xl transition-colors disabled:opacity-50"
         >
-          {generating ? 'Generating...' : '+ Add More'}
+          {generating ? (
+            <div className="w-3 h-3 border-2 border-violet-400/40 border-t-violet-500 rounded-full animate-spin" />
+          ) : (
+            <Plus size={12} />
+          )}
+          {generating ? 'Generating…' : 'Add More'}
         </button>
       </div>
 
-      {/* 3D Flip Card Container */}
-      <div className="flex-1 flex items-center justify-center relative perspective-1000 w-full mb-6 cursor-pointer" onClick={() => setIsFlipped(!isFlipped)}>
-        <div className={`relative w-full max-w-md h-80 transition-all duration-500 transform-style-3d ${isFlipped ? 'rotate-y-180' : ''}`}>
-          
+      {error && (
+        <div className="mb-4 p-3 border border-red-200 bg-red-50 rounded-xl flex items-start gap-2 text-sm flex-shrink-0">
+          <AlertTriangle className="h-4 w-4 text-red-500 mt-0.5 shrink-0" />
+          <div className="flex-1 text-red-700 font-medium">{error}</div>
+          <button onClick={clearError}><X className="h-4 w-4 text-red-400" /></button>
+        </div>
+      )}
+
+      {/* Progress bar */}
+      <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden mb-5 flex-shrink-0">
+        <div
+          className="h-full bg-gradient-to-r from-violet-500 to-purple-500 rounded-full transition-all duration-500"
+          style={{ width: `${((currentIndex + 1) / flashcards.length) * 100}%` }}
+        />
+      </div>
+
+      {/* 3D Flip Card */}
+      <div
+        className="flex-1 flex items-center justify-center cursor-pointer perspective-1000 w-full min-h-0"
+        onClick={() => setIsFlipped(!isFlipped)}
+      >
+        <div className={`relative w-full max-w-sm h-64 transform-style-3d transition-all duration-500 ${isFlipped ? 'rotate-y-180' : ''}`}>
           {/* Front */}
-          <div className="absolute inset-0 backface-hidden bg-white border-2 border-slate-100 shadow-lg rounded-2xl p-8 flex flex-col justify-center items-center text-center">
-            <button onClick={toggleFavorite} className="absolute top-4 right-4 text-slate-300 hover:text-yellow-400 z-10 transition-colors">
-              <Star size={24} fill={card.isFavorite ? 'currentColor' : 'none'} className={card.isFavorite ? 'text-yellow-400' : ''} />
+          <div className="absolute inset-0 backface-hidden bg-white border-2 border-slate-100 shadow-xl rounded-3xl p-7 flex flex-col justify-center items-center text-center overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-violet-50/50 to-indigo-50/30 rounded-3xl" />
+            <button
+              onClick={toggleFavorite}
+              className="absolute top-4 right-4 z-10 transition-transform hover:scale-125"
+            >
+              <Star
+                size={20}
+                fill={card.isFavorite ? 'currentColor' : 'none'}
+                className={card.isFavorite ? 'text-yellow-400' : 'text-slate-200 hover:text-yellow-300'}
+              />
             </button>
-            <h3 className="text-xl font-bold text-slate-800 leading-snug">{card.front}</h3>
-            <p className="absolute bottom-4 text-xs font-semibold text-slate-400 uppercase tracking-wider">Click to flip</p>
+            <p className="relative z-10 text-xs font-bold text-violet-400 uppercase tracking-widest mb-3">Question</p>
+            <h3 className="relative z-10 text-lg font-bold text-slate-800 leading-snug">{card.front}</h3>
+            <p className="absolute bottom-4 text-xs font-semibold text-slate-300 uppercase tracking-wider">Tap to flip</p>
           </div>
 
           {/* Back */}
-          <div className="absolute inset-0 backface-hidden bg-purple-50 border-2 border-purple-100 shadow-lg rounded-2xl p-8 flex flex-col justify-center items-center text-center rotate-y-180">
-            <p className="text-lg text-slate-700 leading-relaxed">{card.back}</p>
-            <p className="absolute bottom-4 text-xs font-semibold text-purple-400 uppercase tracking-wider">Click to flip back</p>
+          <div className="absolute inset-0 backface-hidden bg-gradient-to-br from-violet-500 to-purple-600 border-2 border-violet-400 shadow-xl rounded-3xl p-7 flex flex-col justify-center items-center text-center rotate-y-180 overflow-hidden">
+            <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'linear-gradient(white 1px, transparent 1px), linear-gradient(90deg, white 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
+            <p className="relative z-10 text-xs font-bold text-violet-200 uppercase tracking-widest mb-3">Answer</p>
+            <p className="relative z-10 text-base text-white leading-relaxed font-medium">{card.back}</p>
+            <p className="absolute bottom-4 text-xs font-semibold text-violet-300 uppercase tracking-wider">Tap to flip back</p>
           </div>
-          
         </div>
       </div>
 
       {/* Controls */}
-      <div className="flex justify-center items-center gap-6 mt-auto">
-        <button 
-          onClick={prevCard} 
+      <div className="flex justify-center items-center gap-6 mt-5 flex-shrink-0">
+        <button
+          onClick={prevCard}
           disabled={currentIndex === 0}
-          className="p-3 rounded-full bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:hover:bg-white shadow-sm transition-all"
+          className="p-3 rounded-2xl bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-800 disabled:opacity-30 disabled:cursor-not-allowed shadow-sm transition-all"
         >
-          <ChevronLeft size={24} />
+          <ChevronLeft size={22} />
         </button>
-        <div className="w-16 h-1 bg-slate-200 rounded-full overflow-hidden">
-          <div 
-            className="h-full bg-purple-500 transition-all duration-300" 
-            style={{ width: `${((currentIndex + 1) / flashcards.length) * 100}%` }}
-          />
-        </div>
-        <button 
-          onClick={nextCard} 
+        <button
+          onClick={nextCard}
           disabled={currentIndex === flashcards.length - 1}
-          className="p-3 rounded-full bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:hover:bg-white shadow-sm transition-all"
+          className="p-3 rounded-2xl bg-white border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-800 disabled:opacity-30 disabled:cursor-not-allowed shadow-sm transition-all"
         >
-          <ChevronRight size={24} />
+          <ChevronRight size={22} />
         </button>
       </div>
-      
-      {/* Required CSS for 3D Flip */}
-      <style>{`
-        .perspective-1000 { perspective: 1000px; }
-        .transform-style-3d { transform-style: preserve-3d; }
-        .backface-hidden { backface-visibility: hidden; }
-        .rotate-y-180 { transform: rotateY(180deg); }
-      `}</style>
     </div>
   );
 };

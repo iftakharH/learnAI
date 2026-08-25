@@ -6,7 +6,6 @@ const connectDB = async () => {
       throw new Error('MONGODB_URI is not configured');
     }
 
-    // Force database name to lowercase to avoid casing conflicts
     const dbName = (process.env.MONGODB_DB_NAME || 'learnai').toLowerCase();
 
     const conn = await mongoose.connect(process.env.MONGODB_URI, {
