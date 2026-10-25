@@ -30,7 +30,7 @@ const getModel = (systemInstruction) => {
     throw new Error('GEMINI_API_KEY is not configured in environment variables.');
   }
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  const config = { model: "gemini-3.6-flash" };
+  const config = { model: "gemini-2.0-flash" };
   if (systemInstruction) config.systemInstruction = systemInstruction;
   return genAI.getGenerativeModel(config);
 };
