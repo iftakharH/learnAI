@@ -4,7 +4,7 @@
   "private": true,
   "description": "AI study assistant - monorepo root. The API lives in backend/, the app in frontend/.",
   "engines": {
-    "node": ">=20.19.0"
+    "node": ">=22.3.0 <23"
   },
   "scripts": {
     "postinstall": "npm --prefix backend ci --omit=dev --no-audit --no-fund",

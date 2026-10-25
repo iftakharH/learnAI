@@ -1,12 +1,29 @@
 'use strict';
 
 const mongoose = require('mongoose');
+const crypto = require('crypto');
 const { config } = require('./env');
 const logger = require('../utils/logger');
 
 mongoose.set('strictQuery', true);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Log where we are connecting without ever printing the credential.
+ * The fingerprint lets an operator compare the value a host actually received
+ * with the value they expect, which is the fastest way to catch a stale
+ * MONGODB_URI in a dashboard.
+ */
+const describeTarget = () => {
+  try {
+    const url = new URL(config.mongoUri);
+    const fingerprint = crypto.createHash('sha256').update(config.mongoUri).digest('hex').slice(0, 12);
+    return `${url.host} db=${config.mongoDbName} uriFingerprint=${fingerprint}`;
+  } catch {
+    return 'unparseable MONGODB_URI';
+  }
+};
 
 /**
  * Connect to MongoDB with bounded exponential backoff.
@@ -26,6 +43,8 @@ const connectDB = async () => {
 
   const attempts = Math.max(config.mongoRetries, 1);
   let lastError;
+
+  logger.info(`MongoDB target: ${describeTarget()}`);
 
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {

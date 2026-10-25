@@ -29,7 +29,7 @@ MongoDB + Google Gemini on the back end.
 React 19, Vite, Tailwind CSS v4, React Router, Axios, Lucide icons, canvas-confetti.
 
 ### Backend
-Node.js 20.19+, Express 5, MongoDB + Mongoose, Multer (memory storage), pdf-parse v2,
+Node.js 22 LTS, Express 5, MongoDB + Mongoose, Multer (memory storage), pdf-parse v2,
 `@google/generative-ai`, JWT, Helmet, express-rate-limit.
 
 ---
@@ -84,7 +84,7 @@ learnAI/
 
 ### Prerequisites
 
-- Node.js **20.19 or newer** (Mongoose 9 requirement) and npm 10+
+- Node.js **22.3 or newer** within the Node 22 LTS line (pinned via `engines`) and npm 10+
 - MongoDB Atlas cluster or a local MongoDB instance
 - A Google AI Studio API key
 
