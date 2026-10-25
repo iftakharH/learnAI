@@ -1,30 +1,43 @@
+'use strict';
+
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const { config } = require('../config/env');
+const { ApiError } = require('../utils/ApiError');
 
+/**
+ * Require a valid Bearer token and attach the matching user to `req.user`.
+ */
 const protect = async (req, res, next) => {
-  const authHeader = req.headers.authorization || '';
-
-  if (!authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ message: 'Not authorized, no token' });
-  }
-
-  const token = authHeader.split(' ')[1];
-
-  if (!token) {
-    return res.status(401).json({ message: 'Not authorized, no token' });
-  }
-
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = await User.findById(decoded.id).select('-password');
+    const header = req.headers.authorization || '';
+    const [scheme, token] = header.split(' ');
 
-    if (!req.user) {
-      return res.status(401).json({ message: 'Not authorized, user not found' });
+    if (!token || scheme.toLowerCase() !== 'bearer') {
+      throw ApiError.unauthorized('Authentication required');
     }
 
+    if (!config.jwtSecret) {
+      throw new Error('JWT_SECRET is not configured');
+    }
+
+    const decoded = jwt.verify(token, config.jwtSecret);
+    const user = await User.findById(decoded.id).select('-password');
+
+    if (!user) {
+      throw ApiError.unauthorized('Your session is no longer valid. Please sign in again.');
+    }
+
+    req.user = user;
     return next();
   } catch (error) {
-    return res.status(401).json({ message: 'Not authorized, token failed' });
+    if (error.name === 'TokenExpiredError') {
+      return next(ApiError.unauthorized('Your session has expired. Please sign in again.'));
+    }
+    if (error.name === 'JsonWebTokenError') {
+      return next(ApiError.unauthorized('Invalid authentication token.'));
+    }
+    return next(error);
   }
 };
 

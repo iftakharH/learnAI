@@ -1,6 +1,22 @@
-backend/node_modules
-frontend/node_modules
-
+# Ignore dependencies and local secrets
+node_modules/
 .env
+.env.*
+!.env.example
+
+# Local planning notes
 preparation.md
 tasks.md
+_diff_frontend.txt
+
+# Runtime data
+backend/uploads/
+*.log
+npm-debug.log*
+coverage/
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

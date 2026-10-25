@@ -1,127 +1,115 @@
-# LearnAI 🧠
+# LearnAI
 
-**LearnAI** is a full-stack AI-powered study assistant that transforms any PDF document into an interactive learning experience. Upload your notes, textbooks, or research papers and let Google Gemini AI do the rest.
+**LearnAI** turns a PDF into a study workspace: an AI summary, concept explanations, flashcards,
+quizzes and a chat that answers from the document. React + Vite on the front end, Express +
+MongoDB + Google Gemini on the back end.
 
-![LearnAI](https://img.shields.io/badge/Powered%20By-Google%20Gemini-4285F4?style=flat-square&logo=google)
-![Stack](https://img.shields.io/badge/Stack-MERN%20%2B%20AI-6366f1?style=flat-square)
+[![Powered by Google Gemini](https://img.shields.io/badge/Powered%20By-Google%20Gemini-4285F4?style=flat-square&logo=google)](https://ai.google.dev/)
+![Runtime](https://img.shields.io/badge/Node.js-%E2%89%A520.19-339933?style=flat-square&logo=node.js)
 ![License](https://img.shields.io/badge/License-MIT-emerald?style=flat-square)
 
 ---
 
-## ✨ Features
+## Features
 
 | Feature | Description |
 |---|---|
-| 🤖 **AI Document Chat** | Ask any question about your PDF and get instant, context-aware answers |
-| 💡 **Concept Explainer** | Explain any term or concept in the context of your document |
-| 🃏 **Smart Flashcards** | Auto-generate a 3D flip-card study deck from your document |
-| 🎯 **Adaptive Quizzes** | Take multiple-choice quizzes with instant feedback, scores, and explanations |
-| 📊 **Learning Dashboard** | Track your documents, flashcard count, quizzes taken, and average score |
-| 🔒 **Secure Auth** | JWT-based authentication with bcrypt password hashing |
+| AI document chat | Answers questions about the PDF and keeps the conversation history |
+| Concept explainer | Explains any term using the document as primary context |
+| Flashcards | Generates a deck, saves it, and tracks favourites |
+| Quizzes | Generates multiple-choice quizzes with explanations and stores the best score |
+| Learning dashboard | Documents, flashcard count, quizzes taken and average score |
+| Auth | JWT sessions, bcrypt password hashing, rate-limited login |
 
 ---
 
-## 🛠️ Tech Stack
+## Tech stack
 
 ### Frontend
-- **React 18** + **Vite** — Modern, fast UI framework
-- **Tailwind CSS v4** — Utility-first CSS with custom design tokens
-- **React Router v6** — Client-side routing with protected routes
-- **Lucide React** — Consistent icon system
-- **Axios** — HTTP client with JWT interceptors
-- **Canvas Confetti** — Celebration animations on quiz success
+React 19, Vite, Tailwind CSS v4, React Router, Axios, Lucide icons, canvas-confetti.
 
 ### Backend
-- **Node.js** + **Express.js** — RESTful API server
-- **MongoDB** + **Mongoose** — Document database with schema validation
-- **Multer** — File upload handling
-- **pdf-parse** — PDF text extraction
-- **@google/generative-ai** — Google Gemini AI integration
-- **bcryptjs** — Secure password hashing
-- **jsonwebtoken** — JWT session management
+Node.js 20.19+, Express 5, MongoDB + Mongoose, Multer (memory storage), pdf-parse v2,
+`@google/generative-ai`, JWT, Helmet, express-rate-limit.
 
 ---
 
-## 🗂️ Project Structure
+## How a request flows
+
+```
+React -> Axios (Bearer token) -> Express app
+                                   |-- helmet + cors + rate limit
+                                   |-- auth middleware (JWT -> req.user)
+                                   |-- controller (validation)
+                                   |-- service (PDF text / Gemini / document access)
+                                   `-- Mongoose -> MongoDB
+```
+
+Design rules used throughout the backend:
+
+- Controllers validate input and throw `ApiError`; one error middleware owns status codes.
+- Services never touch `req`/`res`, so they can be unit tested.
+- Environment variables are read in `config/env.js` and validated once at startup.
+- Uploaded PDFs are parsed in memory; only the extracted text is persisted, because a Render
+  instance's disk is wiped on every deploy.
+
+---
+
+## Project structure
 
 ```
 learnAI/
 ├── backend/
-│   ├── controllers/        # Route handler logic
-│   ├── middleware/         # Auth & error middleware
-│   ├── models/             # Mongoose schemas (User, Document, Flashcard, Quiz, Chat)
-│   ├── routes/             # Express route definitions
-│   ├── services/
-│   │   └── aiService.js    # Gemini AI integration (summary, chat, flashcards, quiz)
-│   ├── uploads/            # PDF file storage (local)
-│   └── server.js           # Entry point
-│
-├── frontend/
-│   ├── public/
-│   ├── src/
-│   │   ├── api/            # Axios instance with auth interceptors
-│   │   ├── components/
-│   │   │   └── workspace/  # AIChatTab, AIActionsTab, FlashcardsTab, QuizzesTab
-│   │   ├── context/        # AuthContext (React Context + localStorage)
-│   │   ├── pages/          # LandingPage, Login, Register, Dashboard, Workspace
-│   │   ├── utils/          # authErrors, authStorage helpers
-│   │   ├── App.jsx         # Route definitions
-│   │   └── main.jsx        # App entry point
-│   ├── index.html
-│   └── vite.config.js
-│
-├── .env                    # Environment variables (DO NOT COMMIT)
-├── render.yaml             # Render deployment config
+│   ├── app.js                 # Express app (middleware + routes), exported for tests
+│   ├── server.js              # Process entry point: config, DB, listen, shutdown
+│   ├── config/
+│   │   ├── env.js             # Env parsing + startup validation
+│   │   └── db.js              # Mongo connection with backoff and retries
+│   ├── controllers/           # Request/response handling and input validation
+│   ├── middleware/            # auth, error handling, rate limiting, upload
+│   ├── models/                # Mongoose schemas and indexes
+│   ├── routes/                # Express routers
+│   ├── services/              # aiService, pdfService, documentService
+│   ├── tests/                 # node:test unit tests
+│   └── utils/                 # ApiError, logger
+├── frontend/                  # React + Vite app
+├── render.yaml                # Render blueprint (backend)
+├── .env.example               # Documented environment variables
 └── README.md
 ```
 
 ---
 
-## 🚀 Local Setup
+## Local setup
 
 ### Prerequisites
-- Node.js v18+
-- npm v9+
-- MongoDB Atlas account (or local MongoDB)
-- Google Gemini API Key → [Get one here](https://aistudio.google.com/app/apikey)
 
-### 1. Clone the Repository
+- Node.js **20.19 or newer** (Mongoose 9 requirement) and npm 10+
+- MongoDB Atlas cluster or a local MongoDB instance
+- A Google AI Studio API key
+
+### 1. Clone and configure
 
 ```bash
-git clone https://github.com/your-username/learnAI.git
+git clone https://github.com/iftakharH/learnAI.git
 cd learnAI
+cp .env.example .env
 ```
 
-### 2. Configure Environment Variables
+Fill in `MONGODB_URI`, `JWT_SECRET` and `GEMINI_API_KEY`. The backend reads `.env` from the
+repository root and `backend/.env`.
 
-Create a `.env` file in the **root** directory:
-
-```env
-# MongoDB
-MONGO_URI=mongodb+srv://<user>:<password>@cluster.mongodb.net/learnai
-
-# JWT
-JWT_SECRET=your_super_secret_jwt_key_here
-
-# Google Gemini
-GEMINI_API_KEY=your_gemini_api_key_here
-
-# Server
-PORT=5000
-NODE_ENV=development
-```
-
-### 3. Install & Run the Backend
+### 2. Backend
 
 ```bash
 cd backend
 npm install
-npm run dev
+npm run dev        # node --watch, restarts on change
 ```
 
-Backend runs at `http://localhost:5000`
+The API listens on `http://localhost:5000`. Check it with `GET /api/health`.
 
-### 4. Install & Run the Frontend
+### 3. Frontend
 
 ```bash
 cd frontend
@@ -129,110 +117,209 @@ npm install
 npm run dev
 ```
 
-Frontend runs at `http://localhost:5173`
+The app runs on `http://localhost:5173`. To point it at a remote API, set `VITE_API_URL` in
+`frontend/.env`:
 
-The Vite dev server proxies all `/api` requests to `localhost:5000` automatically.
-
----
-
-## 🌐 Deployment
-
-### Backend → Render
-
-1. Push your code to GitHub
-2. Create a new **Web Service** on [Render](https://render.com)
-3. Connect your GitHub repository
-4. Set the **Root Directory** to `backend`
-5. Set **Build Command**: `npm install`
-6. Set **Start Command**: `node server.js`
-7. Add the following **Environment Variables** in the Render dashboard:
-   - `MONGO_URI`
-   - `JWT_SECRET`
-   - `GEMINI_API_KEY`
-   - `NODE_ENV=production`
-
-### Frontend → Vercel
-
-1. Create a new project on [Vercel](https://vercel.com)
-2. Connect your GitHub repository
-3. Set **Root Directory** to `frontend`
-4. Vercel auto-detects Vite — no build command needed
-5. Add **Environment Variable**:
-   - `VITE_API_URL=https://your-render-backend.onrender.com/api`
-6. Ensure `vercel.json` exists in `/frontend`:
-
-```json
-{
-  "rewrites": [{ "source": "/(.*)", "destination": "/" }]
-}
+```env
+VITE_API_URL=http://localhost:5000/api
 ```
 
-> [!IMPORTANT]  
-> After deploying the backend to Render, update the `VITE_API_URL` in Vercel to point to your Render service URL and redeploy the frontend.
+---
+
+## Environment variables
+
+| Variable | Required | Default | Purpose |
+|---|---|---|---|
+| `MONGODB_URI` | yes | - | MongoDB connection string (`MONGO_URI` also accepted) |
+| `JWT_SECRET` | yes | - | Token signing key, 16+ characters |
+| `GEMINI_API_KEY` | yes | - | Google AI Studio key |
+| `MONGODB_DB_NAME` | no | `learnai` | Database name |
+| `GEMINI_MODEL` | no | `gemini-3.5-flash` | Gemini model ID |
+| `CORS_ORIGINS` | no | localhost + Vercel URLs | Comma-separated allowlist, or `*` |
+| `PORT` | no | `5000` | HTTP port (Render sets this) |
+| `NODE_ENV` | no | `development` | `production` enables strict validation |
+| `AI_TIMEOUT_MS` | no | `45000` | Gemini request timeout |
+| `AI_MAX_TEXT_CHARS` | no | `400000` | Document text sent to the model |
+| `AI_MAX_RETRIES` | no | `1` | Retries for 429/5xx provider errors |
+| `JWT_EXPIRES_IN` | no | `30d` | Token lifetime |
+| `UPLOAD_MAX_BYTES` | no | `15728640` | Max PDF size (15 MB) |
+| `RATE_LIMIT_MAX` | no | `300` | Requests per window per IP |
+| `AUTH_RATE_LIMIT_MAX` | no | `20` | Failed auth attempts per window |
+| `RATE_LIMIT_WINDOW_MS` | no | `900000` | Rate-limit window (15 min) |
 
 ---
 
-## 🔑 API Endpoints
+## Scripts
+
+Run from `backend/`:
+
+| Command | What it does |
+|---|---|
+| `npm start` | Start the API (`node server.js`) |
+| `npm run dev` | Start with file watching |
+| `npm test` | Run the unit tests with Node's built-in runner |
+| `npm run test:coverage` | Tests with coverage report |
+
+Run from `frontend/`:
+
+| Command | What it does |
+|---|---|
+| `npm run dev` | Vite dev server |
+| `npm run build` | Production build |
+| `npm run lint` | oxlint |
+
+---
+
+## API reference
+
+All routes are prefixed with `/api`. Routes marked **auth** need
+`Authorization: Bearer <token>`.
+
+### System
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| GET | `/health` | no | Liveness + database state (503 when Mongo is down) |
+| GET | `/` | no | Service metadata |
 
 ### Auth
-| Method | Endpoint | Description |
-|---|---|---|
-| POST | `/api/auth/register` | Register a new user |
-| POST | `/api/auth/login` | Login and receive JWT token |
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| POST | `/auth/register` | no | Create an account, returns `{ _id, name, email, token }` |
+| POST | `/auth/login` | no | Sign in, returns the same shape |
+| GET | `/auth/profile` | yes | Current user |
+| PUT | `/auth/update-password` | yes | Body: `{ currentPassword, password }` |
 
 ### Documents
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/api/documents` | List all user documents |
-| POST | `/api/documents/upload` | Upload a PDF (multipart/form-data) |
-| GET | `/api/documents/:id` | Get document details + extracted text |
-| DELETE | `/api/documents/:id` | Delete a document |
 
-### AI Features
-| Method | Endpoint | Description |
-|---|---|---|
-| POST | `/api/ai/:id/chat` | Chat with a document |
-| POST | `/api/ai/:id/summary` | Generate a document summary |
-| POST | `/api/ai/:id/explain` | Explain a concept |
-| POST | `/api/ai/:id/flashcards` | Generate flashcard deck |
-| POST | `/api/ai/:id/quiz` | Generate a quiz |
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| GET | `/documents` | yes | List documents (text omitted) |
+| POST | `/documents/upload` | yes | `multipart/form-data`, field `document`, PDF only |
+| GET | `/documents/:id` | yes | Document including extracted text |
+| DELETE | `/documents/:id` | yes | Deletes the document and everything generated from it |
 
-### Flashcards
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/api/flashcards?document=:id` | Get flashcards for a document |
-| POST | `/api/flashcards/bulk` | Save bulk flashcards |
-| PUT | `/api/flashcards/:id/favorite` | Toggle favorite |
+### AI
 
-### Quizzes
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/api/quizzes?document=:id` | Get quizzes for a document |
-| POST | `/api/quizzes` | Save a new quiz |
-| PUT | `/api/quizzes/:id/submit` | Submit quiz score |
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| POST | `/ai/:documentId/summary` | yes | Structured summary |
+| POST | `/ai/:documentId/explain` | yes | Body: `{ concept }` |
+| POST | `/ai/:documentId/flashcards` | yes | Body: `{ count }` (1-50) |
+| POST | `/ai/:documentId/quiz` | yes | Body: `{ numQuestions }` (1-20) |
+| POST | `/ai/:documentId/chat` | yes | Body: `{ query }`, returns `{ response, messages }` |
+
+### Flashcards and quizzes
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| GET | `/flashcards?document=:id` | yes | List flashcards |
+| POST | `/flashcards/bulk` | yes | Body: `{ documentId, flashcards: [{ front, back }] }` |
+| PUT | `/flashcards/:id/favorite` | yes | Toggle favourite |
+| DELETE | `/flashcards/:id` | yes | Delete one card |
+| GET | `/quizzes?document=:id` | yes | List quizzes |
+| POST | `/quizzes` | yes | Body: `{ documentId, title, questions }` |
+| PUT | `/quizzes/:id/submit` | yes | Body: `{ score }` |
 
 ### Dashboard
-| Method | Endpoint | Description |
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| GET | `/dashboard` | yes | `{ totalDocuments, flashcardCount, quizzesTaken, averageScore }` |
+
+Errors always return `{ "message": "..." }` with a matching HTTP status.
+
+---
+
+## Deployment
+
+### Backend on Render
+
+The repository contains a blueprint (`render.yaml`). Recommended path:
+
+1. Push to GitHub.
+2. In Render choose **New -> Blueprint** and select this repository.
+3. Render creates `learnai-backend` with:
+   - **Root Directory**: `backend`
+   - **Build**: `npm ci --omit=dev --no-audit --no-fund`
+   - **Start**: `npm start`
+   - **Health check**: `/api/health`
+4. Fill the secret environment variables when prompted: `MONGODB_URI`, `JWT_SECRET`,
+   `GEMINI_API_KEY`.
+
+If you create the service manually instead, set **Root Directory** to `backend`. This is the
+single most common deployment mistake for this repository.
+
+As a fallback, the repository root also has a `package.json` whose `postinstall` installs the
+backend dependencies and whose `start` runs `node backend/server.js`. A service created at the
+repository root with `npm install` + `npm start` therefore works too, but setting Root
+Directory to `backend` is still the preferred setup.
+
+#### Troubleshooting a failed Render deploy
+
+| Build log says | Cause | Fix |
 |---|---|---|
-| GET | `/api/dashboard` | Get aggregated learning stats |
+| `npm error code ENOENT` / `Could not read package.json` | Root Directory is the repo root, which has no manifest | Set Root Directory to `backend` |
+| `npm error Missing script: "start"` | Start command runs outside `backend` | Use `npm start` with Root Directory `backend` |
+| `npm error code ETARGET ... cors@...` | A dependency version that does not exist | Run `npm ci` locally and commit the updated lock file |
+| `npm error code EBADENGINE` | Node too old for Mongoose 9 | Set `NODE_VERSION=22` in Render |
+| `Missing required environment variables` | Secrets not set on the service | Add them under Environment, then redeploy |
+| `Could not connect to MongoDB after N attempts` | Wrong URI, or Atlas IP allowlist blocks Render | Allow `0.0.0.0/0` in Atlas, check the password |
+| `Exited with status 1` with no other message | Process crashed at startup | Open the full log; the first error line is the cause |
+
+`GET /api/health` returns `200 {"status":"ok","database":"connected"}` when the service is
+healthy.
+
+### Frontend on Vercel
+
+1. Import the repository, set **Root Directory** to `frontend`.
+2. Vercel detects Vite automatically.
+3. Add `VITE_API_URL=https://<your-service>.onrender.com/api`.
+4. Deploy, then add the Vercel domain to `CORS_ORIGINS` on Render if it is not a
+   `*.vercel.app` address.
 
 ---
 
-## 🔒 Security
+## Testing
 
-- All API routes (except `/auth/login` and `/auth/register`) require a valid Bearer JWT token
-- Passwords are hashed using `bcryptjs` with a salt factor of 10
-- Uploaded PDFs are stored server-side and only accessible by the authenticated uploader
-- CORS is configured to allow only the frontend origin in production
+```bash
+cd backend
+npm test
+```
+
+The suite covers error-status mapping and AI response parsing/history normalisation. Both run
+without a database or an API key.
+
+For a manual smoke test, start the backend and use:
+
+```bash
+curl http://localhost:5000/api/health
+```
 
 ---
 
-## 🧠 AI Model
+## Security notes
 
-LearnAI uses **Google Gemini Flash** (cost-efficient, fast). All AI features use structured output schemas to guarantee valid JSON responses and eliminate brittle text parsing.
+- Passwords are hashed with bcrypt (cost 10) and never returned by any endpoint.
+- JWTs are verified on every protected route; expired tokens return `401`.
+- Login and register are rate limited separately from the rest of the API.
+- Uploads are limited to PDFs and 15 MB; the parser rejects encrypted or corrupt files.
+- CORS only accepts configured origins plus `*.vercel.app`.
+- MongoDB queries always filter by the authenticated user id, so one account cannot read
+  another account's documents.
 
----
+## AI notes
 
-## 📄 License
+- Google retires model IDs regularly. `gemini-2.0-flash` and `gemini-2.5-flash` no longer
+  exist; the default is `gemini-3.5-flash`, and the service falls back to
+  `gemini-flash-latest` if a configured model disappears.
+- The Gemini free tier allows roughly five generate requests per minute per model. Generating
+  a summary, a deck and a quiz in quick succession can hit that limit; the API returns a
+  friendly 502/503 and the client can retry.
+- Responses are requested as JSON and validated before use; invalid cards or questions are
+  dropped rather than shown to the user.
 
-MIT © 2026 LearnAI. Built for educational purposes.
+## License
+
+MIT (c) 2026 LearnAI. Built for educational use.

@@ -1,133 +1,88 @@
+'use strict';
+
+const path = require('path');
+const fs = require('fs');
 const Document = require('../models/Document');
 const ChatHistory = require('../models/ChatHistory');
 const Flashcard = require('../models/Flashcard');
 const Quiz = require('../models/Quiz');
-const fs = require('fs');
-const pdfParse = require('pdf-parse');
+const { extractPdfText } = require('../services/pdfService');
+const { getOwnedDocument, toDocumentResponse } = require('../services/documentService');
+const { ApiError } = require('../utils/ApiError');
+const logger = require('../utils/logger');
 
-// @desc    Upload a new document & extract text
+const MAX_FILENAME_LENGTH = 255;
+
+const safeFilename = (originalName) =>
+  path
+    .basename(String(originalName || 'document.pdf'))
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+    .slice(0, MAX_FILENAME_LENGTH);
+
+// @desc    Upload a PDF and store its extracted text
 // @route   POST /api/documents/upload
 // @access  Private
-const uploadDocument = async (req, res, next) => {
-  try {
-    if (!req.file) {
-      res.status(400);
-      throw new Error('Please upload a file');
-    }
-
-    // 1. Resolve buffer safely from memory storage or disk path
-    let dataBuffer;
-    if (req.file.buffer) {
-      dataBuffer = req.file.buffer;
-    } else if (req.file.path && fs.existsSync(req.file.path)) {
-      dataBuffer = fs.readFileSync(req.file.path);
-    } else {
-      res.status(400);
-      throw new Error('Could not read uploaded file buffer');
-    }
-
-    // 2. Parse PDF buffer
-    let extractedText = '';
-    try {
-      const parsed = await pdfParse(dataBuffer);
-      extractedText = parsed && parsed.text ? parsed.text.trim() : '';
-    } catch (parseErr) {
-      console.error('[PDF Parse Error]:', parseErr.message);
-      if (req.file.path && fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
-      }
-      return res.status(400).json({
-        message: 'Failed to parse PDF. Ensure the file is a valid, non-corrupted PDF.',
-      });
-    }
-
-    // 3. Check for readable text
-    if (!extractedText || extractedText.length < 10) {
-      if (req.file.path && fs.existsSync(req.file.path)) {
-        fs.unlinkSync(req.file.path);
-      }
-      return res.status(400).json({
-        message: 'No readable text found in PDF. Scanned or image-only PDFs are not supported.',
-      });
-    }
-
-    // 4. Save record
-    const newDocument = await Document.create({
-      user: req.user._id,
-      originalFilename: req.file.originalname,
-      storedFilepath: req.file.path || '',
-      fileSize: req.file.size,
-      extractedText: extractedText,
-    });
-
-    res.status(201).json(newDocument);
-  } catch (error) {
-    if (req.file?.path && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
-    }
-    next(error);
+const uploadDocument = async (req, res) => {
+  if (!req.file) {
+    throw ApiError.badRequest('Please attach a PDF using the "document" field');
   }
+
+  const extractedText = await extractPdfText(req.file.buffer);
+
+  const document = await Document.create({
+    user: req.user._id,
+    originalFilename: safeFilename(req.file.originalname),
+    fileSize: req.file.size,
+    extractedText,
+  });
+
+  logger.info(
+    `Document ${document._id} uploaded by ${req.user._id} (${req.file.size} bytes, ${extractedText.length} chars)`,
+  );
+
+  res.status(201).json(toDocumentResponse(document));
 };
 
-// @desc    Get all documents for logged in user
+// @desc    List the signed-in user's documents
 // @route   GET /api/documents
 // @access  Private
-const getDocuments = async (req, res, next) => {
-  try {
-    const documents = await Document.find({ user: req.user._id })
-      .sort({ createdAt: -1 })
-      .select('-extractedText');
-    res.json(documents);
-  } catch (error) {
-    next(error);
-  }
+const getDocuments = async (req, res) => {
+  const documents = await Document.find({ user: req.user._id })
+    .sort({ createdAt: -1 })
+    .select('-extractedText');
+
+  res.json(documents.map((document) => toDocumentResponse(document)));
 };
 
-// @desc    Get single document by ID
+// @desc    Get one document including its extracted text
 // @route   GET /api/documents/:id
 // @access  Private
-const getDocumentById = async (req, res, next) => {
-  try {
-    const document = await Document.findById(req.params.id);
-
-    if (!document || document.user.toString() !== req.user._id.toString()) {
-      res.status(404);
-      throw new Error('Document not found or unauthorized');
-    }
-
-    res.json(document);
-  } catch (error) {
-    next(error);
-  }
+const getDocumentById = async (req, res) => {
+  const document = await getOwnedDocument(req.params.id, req.user._id);
+  res.json(toDocumentResponse(document, { includeText: true }));
 };
 
-// @desc    Delete document
+// @desc    Delete a document and everything generated from it
 // @route   DELETE /api/documents/:id
 // @access  Private
-const deleteDocument = async (req, res, next) => {
-  try {
-    const document = await Document.findById(req.params.id);
+const deleteDocument = async (req, res) => {
+  const document = await getOwnedDocument(req.params.id, req.user._id);
 
-    if (!document || document.user.toString() !== req.user._id.toString()) {
-      res.status(404);
-      throw new Error('Document not found or unauthorized');
-    }
-
-    if (document.storedFilepath && fs.existsSync(document.storedFilepath)) {
-      fs.unlinkSync(document.storedFilepath);
-    }
-
-    await Promise.all([
-      ChatHistory.deleteMany({ document: document._id, user: req.user._id }),
-      Flashcard.deleteMany({ document: document._id, user: req.user._id }),
-      Quiz.deleteMany({ document: document._id, user: req.user._id }),
-    ]);
-
-    await document.deleteOne();
-    res.json({ message: 'Document removed' });
-  } catch (error) {
-    next(error);
+  // Legacy records created before uploads moved to memory storage.
+  if (document.storedFilepath) {
+    fs.rm(document.storedFilepath, { force: true }, (error) => {
+      if (error) logger.warn(`Could not delete legacy upload ${document.storedFilepath}: ${error.message}`);
+    });
   }
+
+  await Promise.all([
+    ChatHistory.deleteMany({ document: document._id, user: req.user._id }),
+    Flashcard.deleteMany({ document: document._id, user: req.user._id }),
+    Quiz.deleteMany({ document: document._id, user: req.user._id }),
+  ]);
+
+  await document.deleteOne();
+  res.json({ message: 'Document removed' });
 };
 
 module.exports = { uploadDocument, getDocuments, getDocumentById, deleteDocument };

@@ -1,120 +1,112 @@
+'use strict';
+
 const {
   generateDocumentSummary,
   explainConcept,
   generateFlashcards,
   generateQuiz,
-  processDocumentChat
+  processDocumentChat,
 } = require('../services/aiService');
-const Document = require('../models/Document');
+const { getOwnedDocument } = require('../services/documentService');
 const ChatHistory = require('../models/ChatHistory');
+const { ApiError } = require('../utils/ApiError');
+const logger = require('../utils/logger');
 
-const getDocAndCheckAuth = async (req, res) => {
-  const document = await Document.findById(req.params.documentId);
-  if (!document) {
-    res.status(404);
-    throw new Error('Document not found');
+const MAX_QUERY_LENGTH = 2000;
+const MAX_STORED_MESSAGES = 40; // 20 turns
+
+const requireDocumentText = (document) => {
+  if (!document.extractedText || !document.extractedText.trim()) {
+    throw ApiError.unprocessable(
+      'This document has no extracted text yet. Upload the PDF again.',
+    );
   }
-  if (document.user.toString() !== req.user._id.toString()) {
-    res.status(401);
-    throw new Error('Unauthorized access to document');
-  }
-  return document;
+  return document.extractedText;
 };
 
-// @desc    Generate a summary for a document
+// @desc    Generate a summary
 // @route   POST /api/ai/:documentId/summary
 // @access  Private
-const summarizeDocument = async (req, res, next) => {
-  try {
-    const document = await getDocAndCheckAuth(req, res);
-    const summary = await generateDocumentSummary(document.extractedText);
-    res.json({ summary });
-  } catch (error) {
-    next(error);
-  }
+const summarizeDocument = async (req, res) => {
+  const document = await getOwnedDocument(req.params.documentId, req.user._id);
+  const summary = await generateDocumentSummary(requireDocumentText(document));
+  res.json({ summary });
 };
 
-// @desc    Explain a specific concept from a document
+// @desc    Explain a concept in the document's context
 // @route   POST /api/ai/:documentId/explain
 // @access  Private
-const explainDocumentConcept = async (req, res, next) => {
-  try {
-    const { concept } = req.body;
-    if (!concept) {
-      res.status(400);
-      throw new Error('Concept is required');
-    }
-    const document = await getDocAndCheckAuth(req, res);
-    const explanation = await explainConcept(concept, document.extractedText);
-    res.json({ explanation });
-  } catch (error) {
-    next(error);
+const explainDocumentConcept = async (req, res) => {
+  const concept = String(req.body?.concept || '').trim();
+  if (!concept) {
+    throw ApiError.badRequest('Concept is required');
   }
+
+  const document = await getOwnedDocument(req.params.documentId, req.user._id);
+  const explanation = await explainConcept(concept, requireDocumentText(document));
+  res.json({ explanation });
 };
 
-// @desc    Generate flashcards from a document
+// @desc    Generate flashcards (not persisted; the client saves them)
 // @route   POST /api/ai/:documentId/flashcards
 // @access  Private
-const createFlashcards = async (req, res, next) => {
-  try {
-    const { count } = req.body;
-    const document = await getDocAndCheckAuth(req, res);
-    const flashcardsData = await generateFlashcards(document.extractedText, count || 10);
-    res.json({ flashcards: flashcardsData });
-  } catch (error) {
-    next(error);
-  }
+const createFlashcards = async (req, res) => {
+  const document = await getOwnedDocument(req.params.documentId, req.user._id);
+  const flashcards = await generateFlashcards(
+    requireDocumentText(document),
+    req.body?.count ?? 10,
+  );
+  res.json({ flashcards });
 };
 
-// @desc    Generate quiz from a document
+// @desc    Generate a quiz (not persisted; the client saves it)
 // @route   POST /api/ai/:documentId/quiz
 // @access  Private
-const createQuiz = async (req, res, next) => {
-  try {
-    const { numQuestions } = req.body;
-    const document = await getDocAndCheckAuth(req, res);
-    const quizData = await generateQuiz(document.extractedText, numQuestions || 5);
-    res.json({ quiz: quizData });
-  } catch (error) {
-    next(error);
-  }
+const createQuiz = async (req, res) => {
+  const document = await getOwnedDocument(req.params.documentId, req.user._id);
+  const quiz = await generateQuiz(
+    requireDocumentText(document),
+    req.body?.numQuestions ?? 5,
+  );
+  res.json({ quiz });
 };
 
-// @desc    Chat with a document
+// @desc    Chat with a document, persisting the conversation
 // @route   POST /api/ai/:documentId/chat
 // @access  Private
-const chatWithDocument = async (req, res, next) => {
-  try {
-    const { query } = req.body;
-    if (!query) {
-      res.status(400);
-      throw new Error('Chat query is required');
-    }
-
-    const document = await getDocAndCheckAuth(req, res);
-
-    // Fetch existing chat history from DB
-    let chatSession = await ChatHistory.findOne({ user: req.user._id, document: document._id });
-    if (!chatSession) {
-      chatSession = new ChatHistory({
-        user: req.user._id,
-        document: document._id,
-        messages: []
-      });
-    }
-
-    // Process with Gemini
-    const aiResponseText = await processDocumentChat(chatSession.messages, query, document.extractedText);
-
-    // Update history
-    chatSession.messages.push({ role: 'user', text: query });
-    chatSession.messages.push({ role: 'model', text: aiResponseText });
-    await chatSession.save();
-
-    res.json({ response: aiResponseText, messages: chatSession.messages });
-  } catch (error) {
-    next(error);
+const chatWithDocument = async (req, res) => {
+  const query = String(req.body?.query || '').trim();
+  if (!query) {
+    throw ApiError.badRequest('Chat query is required');
   }
+  if (query.length > MAX_QUERY_LENGTH) {
+    throw ApiError.badRequest(`Chat query cannot exceed ${MAX_QUERY_LENGTH} characters`);
+  }
+
+  const document = await getOwnedDocument(req.params.documentId, req.user._id);
+
+  // Upsert keeps exactly one conversation per user/document pair.
+  const session = await ChatHistory.findOneAndUpdate(
+    { user: req.user._id, document: document._id },
+    { $setOnInsert: { user: req.user._id, document: document._id, messages: [] } },
+    { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true },
+  );
+
+  const reply = await processDocumentChat(
+    session.messages,
+    query,
+    requireDocumentText(document),
+  );
+
+  session.messages.push({ role: 'user', text: query }, { role: 'model', text: reply });
+  if (session.messages.length > MAX_STORED_MESSAGES) {
+    session.messages = session.messages.slice(-MAX_STORED_MESSAGES);
+  }
+
+  await session.save();
+  logger.debug(`Chat reply stored for document ${document._id}`);
+
+  res.json({ response: reply, messages: session.messages });
 };
 
 module.exports = {
@@ -122,5 +114,5 @@ module.exports = {
   explainDocumentConcept,
   createFlashcards,
   createQuiz,
-  chatWithDocument
+  chatWithDocument,
 };

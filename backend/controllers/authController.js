@@ -1,131 +1,131 @@
+'use strict';
+
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const { config } = require('../config/env');
+const { ApiError } = require('../utils/ApiError');
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MIN_PASSWORD_LENGTH = 6;
+const MAX_PASSWORD_LENGTH = 128;
 
 const generateToken = (id) => {
-  if (!process.env.JWT_SECRET) {
+  if (!config.jwtSecret) {
     throw new Error('JWT_SECRET is not configured');
   }
+  return jwt.sign({ id: String(id) }, config.jwtSecret, { expiresIn: config.jwtExpiresIn });
+};
 
-  return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '30d' });
+const toAuthResponse = (user) => ({
+  _id: user._id,
+  name: user.name,
+  email: user.email,
+  token: generateToken(user._id),
+});
+
+const assertPasswordPolicy = (password) => {
+  if (typeof password !== 'string' || password.length < MIN_PASSWORD_LENGTH) {
+    throw ApiError.badRequest(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
+  }
+  if (password.length > MAX_PASSWORD_LENGTH) {
+    throw ApiError.badRequest(`Password cannot exceed ${MAX_PASSWORD_LENGTH} characters`);
+  }
 };
 
 // @desc    Register a new user
 // @route   POST /api/auth/register
 // @access  Public
-const registerUser = async (req, res, next) => {
-  try {
-    const name = req.body.name?.trim();
-    const email = req.body.email?.trim().toLowerCase();
-    const { password } = req.body;
+const registerUser = async (req, res) => {
+  const name = String(req.body?.name || '').trim();
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  const password = req.body?.password;
 
-    if (!name || !email || !password) {
-      res.status(400);
-      throw new Error('Name, email, and password are required');
-    }
-
-    if (password.length < 6) {
-      res.status(400);
-      throw new Error('Password must be at least 6 characters');
-    }
-
-    const userExists = await User.findOne({ email });
-    if (userExists) {
-      res.status(400);
-      throw new Error('User already exists');
-    }
-
-    const user = await User.create({ name, email, password });
-
-    if (user) {
-      res.status(201).json({
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        token: generateToken(user._id),
-      });
-    } else {
-      res.status(400);
-      throw new Error('Invalid user data');
-    }
-  } catch (error) {
-    if (error.code === 11000) {
-      res.status(400);
-      return next(new Error('User already exists'));
-    }
-
-    next(error);
+  if (!name || !email || !password) {
+    throw ApiError.badRequest('Name, email, and password are required');
   }
+  if (name.length > 80) {
+    throw ApiError.badRequest('Name cannot exceed 80 characters');
+  }
+  if (!EMAIL_PATTERN.test(email)) {
+    throw ApiError.badRequest('Please provide a valid email address');
+  }
+  assertPasswordPolicy(password);
+
+  if (await User.exists({ email })) {
+    throw ApiError.conflict('An account with this email already exists');
+  }
+
+  let user;
+  try {
+    user = await User.create({ name, email, password });
+  } catch (error) {
+    // Covers the race between the existence check and the insert.
+    if (error.code === 11000) {
+      throw ApiError.conflict('An account with this email already exists');
+    }
+    throw error;
+  }
+
+  res.status(201).json(toAuthResponse(user));
 };
 
-// @desc    Auth user & get token
+// @desc    Authenticate a user and return a token
 // @route   POST /api/auth/login
 // @access  Public
-const loginUser = async (req, res, next) => {
-  try {
-    const email = req.body.email?.trim().toLowerCase();
-    const { password } = req.body;
+const loginUser = async (req, res) => {
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  const password = req.body?.password;
 
-    if (!email || !password) {
-      res.status(400);
-      throw new Error('Email and password are required');
-    }
-
-    const user = await User.findOne({ email });
-
-    if (user && (await user.matchPassword(password))) {
-      res.json({
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        token: generateToken(user._id),
-      });
-    } else {
-      res.status(401);
-      throw new Error('Invalid email or password');
-    }
-  } catch (error) {
-    next(error);
+  if (!email || !password) {
+    throw ApiError.badRequest('Email and password are required');
   }
+
+  const user = await User.findOne({ email }).select('+password');
+  const isValid = user ? await user.matchPassword(String(password)) : false;
+
+  if (!isValid) {
+    throw ApiError.unauthorized('Invalid email or password');
+  }
+
+  res.json(toAuthResponse(user));
 };
 
-// @desc    Get user profile
+// @desc    Get the signed-in user
 // @route   GET /api/auth/profile
 // @access  Private
-const getUserProfile = async (req, res, next) => {
-  try {
-    const user = await User.findById(req.user._id);
-    if (user) {
-      res.json({
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-      });
-    } else {
-      res.status(404);
-      throw new Error('User not found');
-    }
-  } catch (error) {
-    next(error);
+const getUserProfile = async (req, res) => {
+  const user = await User.findById(req.user._id);
+  if (!user) {
+    throw ApiError.notFound('User not found');
   }
+
+  res.json({ _id: user._id, name: user.name, email: user.email });
 };
 
-// @desc    Update user password
+// @desc    Change the password
 // @route   PUT /api/auth/update-password
 // @access  Private
-const updateUserPassword = async (req, res, next) => {
-  try {
-    const user = await User.findById(req.user._id);
-    if (user) {
-      user.password = req.body.password || user.password;
-      await user.save();
-      res.json({ message: 'Password updated successfully' });
-    } else {
-      res.status(404);
-      throw new Error('User not found');
-    }
-  } catch (error) {
-    next(error);
+const updateUserPassword = async (req, res) => {
+  const { currentPassword, password } = req.body || {};
+
+  if (!currentPassword || !password) {
+    throw ApiError.badRequest('currentPassword and password are required');
   }
+  assertPasswordPolicy(password);
+
+  const user = await User.findById(req.user._id).select('+password');
+  if (!user) {
+    throw ApiError.notFound('User not found');
+  }
+
+  if (!(await user.matchPassword(String(currentPassword)))) {
+    throw ApiError.unauthorized('Current password is incorrect');
+  }
+
+  user.password = password;
+  await user.save();
+
+  res.json({ message: 'Password updated successfully' });
 };
 
 module.exports = { registerUser, loginUser, getUserProfile, updateUserPassword };
