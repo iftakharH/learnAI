@@ -16,7 +16,7 @@ const AIActionsTab = ({ documentId }) => {
     setLoadingAction('summary');
     setSummaryError('');
     try {
-      const res = await api.post(`/ai/${documentId}/summary`);
+      const res = await api.post(`/ai/${documentId}/summary`, null, { timeout: 120000 });
       setSummary(res.data.summary);
     } catch (err) {
       setSummaryError(getApiErrorMessage(err));
@@ -31,7 +31,7 @@ const AIActionsTab = ({ documentId }) => {
     setLoadingAction('explain');
     setExplainError('');
     try {
-      const res = await api.post(`/ai/${documentId}/explain`, { concept });
+      const res = await api.post(`/ai/${documentId}/explain`, { concept }, { timeout: 120000 });
       setExplanation(res.data.explanation);
     } catch (err) {
       setExplainError(getApiErrorMessage(err));

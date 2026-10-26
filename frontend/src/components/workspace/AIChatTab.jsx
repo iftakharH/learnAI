@@ -32,7 +32,7 @@ const AIChatTab = ({ documentId }) => {
     setLoading(true);
 
     try {
-      const res = await api.post(`/ai/${documentId}/chat`, { query: userMessage.text });
+      const res = await api.post(`/ai/${documentId}/chat`, { query: userMessage.text }, { timeout: 120000 });
       // Backend returns { messages: full history } — prefer that to stay in sync with DB
       if (res.data && Array.isArray(res.data.messages)) {
         setMessages(res.data.messages);

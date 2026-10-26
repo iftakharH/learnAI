@@ -288,7 +288,7 @@ const LandingPage = () => {
                 <div className="w-3 h-3 rounded-full bg-yellow-400" />
                 <div className="w-3 h-3 rounded-full bg-emerald-400" />
                 <div className="flex-1 mx-3 bg-slate-200 rounded-full h-5 px-3 flex items-center">
-                  <span className="text-[10px] text-slate-400 font-mono">learnai.vercel.app/workspace</span>
+                  <span className="text-[10px] text-slate-400 font-mono">learn-ai-edu.vercel.app/workspace</span>
                 </div>
               </div>
 

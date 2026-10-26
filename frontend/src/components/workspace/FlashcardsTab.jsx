@@ -37,7 +37,7 @@ const FlashcardsTab = ({ documentId }) => {
     try {
       setGenerating(true);
       clearError();
-      const res = await api.post(`/ai/${documentId}/flashcards`, { count: 10 });
+      const res = await api.post(`/ai/${documentId}/flashcards`, { count: 10 }, { timeout: 120000 });
       const generated = res.data && res.data.flashcards;
       if (!Array.isArray(generated) || generated.length === 0) {
         throw new Error('No valid flashcards were generated. Please try again with a text-based PDF.');

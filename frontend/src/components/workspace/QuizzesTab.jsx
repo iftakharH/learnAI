@@ -42,7 +42,7 @@ const QuizzesTab = ({ documentId }) => {
     try {
       setGenerating(true);
       clearError();
-      const res = await api.post(`/ai/${documentId}/quiz`, { numQuestions: 5 });
+      const res = await api.post(`/ai/${documentId}/quiz`, { numQuestions: 5 }, { timeout: 120000 });
       const questions = res.data && res.data.quiz;
       if (!Array.isArray(questions) || questions.length === 0) {
         throw new Error('No valid quiz questions were generated. Please try again with a text-based PDF.');
