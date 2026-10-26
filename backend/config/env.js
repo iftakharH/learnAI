@@ -5,7 +5,6 @@ const DEFAULT_CORS_ORIGINS = [
   'http://localhost:5174',
   'http://localhost:3000',
   'https://learn-ai-edu.vercel.app',
-  'https://learnai.vercel.app',
 ];
 
 const toInt = (value, fallback) => {
