@@ -7,7 +7,10 @@ const apiBaseURL = envUrl.endsWith('/api') ? envUrl : `${envUrl.replace(/\/$/, '
 
 // A hung API must surface as an error, never as an endless spinner. AI routes
 // override this with a longer timeout because generation can take ~60s.
-const DEFAULT_TIMEOUT_MS = 20000;
+// The default also has to survive a Render free-tier cold start (~30-60s),
+// which is why it is generous; the app pings /health on load to warm the
+// service before the first real request.
+const DEFAULT_TIMEOUT_MS = 60000;
 const NETWORK_ERROR_MESSAGE =
   'Cannot reach the server right now. Please check your connection and try again.';
 
